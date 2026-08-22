@@ -26,8 +26,20 @@ model = WhisperModel(
 )
 
 
-
 def transcribe(audio_path: str) -> str:
-    segments, _ = model.transcribe(audio_path)
+    segments, _ = model.transcribe(
+        audio_path,
+        language="en",
+        task="transcribe",
+        beam_size=5,
+        best_of=5,
+        temperature=0.0,
+        vad_filter=True,
+        condition_on_previous_text=False,
+    )
 
-    return " ".join(segment.text.strip() for segment in segments)
+    return " ".join(
+        segment.text.strip()
+        for segment in segments
+        if segment.text.strip()
+    )

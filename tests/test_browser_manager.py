@@ -1,3 +1,5 @@
+import time
+
 from app.browser.browser import BrowserTools
 from app.browser.manager import BrowserManager
 
@@ -8,16 +10,13 @@ def main():
 
     tools = BrowserTools(browser)
 
-    print("🌐 Searching the web...")
+    print(tools.open_url("https://www.google.com"))
 
-    result = tools.web_search(
-        "current Prime Minister of India"
-    )
+    time.sleep(2)
 
-    print("\nRESULT:")
-    print(result)
+    print(tools.search_youtube("OSI model"))
 
-    input("\nPress Enter to close browser...")
+    time.sleep(5)
 
     browser.close()
 
