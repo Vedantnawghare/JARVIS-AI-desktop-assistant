@@ -26,6 +26,7 @@ model = WhisperModel(
 )
 
 
+
 def transcribe(audio_path: str) -> str:
     segments, _ = model.transcribe(audio_path)
 
