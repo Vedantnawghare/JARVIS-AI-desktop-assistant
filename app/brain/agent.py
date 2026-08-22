@@ -28,6 +28,7 @@ When no tool is required, respond ONLY with:
 Available tools:
 
 - open_url(url): Opens a URL in the default browser.
+- search_youtube(query): Searches YouTube for a given query.
 
 Never invent tools.
 Never execute code.
