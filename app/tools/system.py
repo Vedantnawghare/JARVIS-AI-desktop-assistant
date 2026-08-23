@@ -4,6 +4,7 @@ import subprocess
 import time
 
 import psutil
+import pyautogui
 import pygetwindow as gw
 
 from app.tools.window import remember_window
@@ -323,3 +324,51 @@ def open_path(path: str) -> str:
             f"Could not open path "
             f"{path}: {exc}"
         )
+
+
+def volume_up() -> str:
+    pyautogui.press(
+        "volumeup",
+        presses=2,
+        interval=0.1,
+    )
+
+    return "Volume increased"
+
+
+def volume_down() -> str:
+    pyautogui.press(
+        "volumedown",
+        presses=2,
+        interval=0.1,
+    )
+
+    return "Volume decreased"
+
+
+def mute() -> str:
+    pyautogui.press("volumemute")
+
+    return "Volume muted"
+
+
+def unmute() -> str:
+    pyautogui.press("volumemute")
+
+    return "Volume unmuted"
+
+
+def lock_pc() -> str:
+    try:
+        subprocess.run(
+            [
+                "rundll32.exe",
+                "user32.dll,LockWorkStation",
+            ],
+            check=True,
+        )
+
+        return "PC locked"
+
+    except Exception as exc:
+        return f"Could not lock PC: {exc}"

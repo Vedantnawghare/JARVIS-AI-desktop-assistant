@@ -27,17 +27,15 @@ def remember_window(name: str, window) -> str:
 
     _TARGET_WINDOWS[key] = window
 
-    return (
-        f"Remembered window: {window.title}"
-    )
+    return f"Remembered window: {window.title}"
 
 
 def _valid_window(window):
     try:
         return (
             window is not None
-            and window.title
-            and window.title.strip()
+            and bool(window.title)
+            and bool(window.title.strip())
         )
     except Exception:
         return False
@@ -51,13 +49,47 @@ def _windows():
     ]
 
 
+def _find_specific_window(name: str):
+    query = name.strip().lower()
+
+    windows = _windows()
+
+    exact = []
+
+    for window in windows:
+        title = window.title.lower()
+
+        if query == title:
+            exact.append(window)
+
+    if exact:
+        return exact[0]
+
+    matches = []
+
+    for window in windows:
+        title = window.title.lower()
+
+        if query in title:
+            matches.append(window)
+
+    if matches:
+        return matches[0]
+
+    return None
+
+
 def _find_window(name: str):
     key = name.strip().lower()
+    app = ALIASES.get(key, key)
 
-    app = ALIASES.get(
-        key,
-        key,
-    )
+    if app not in {
+        "chrome",
+        "brave",
+        "vs code",
+        "edge",
+    }:
+        return _find_specific_window(name)
 
     remembered = _TARGET_WINDOWS.get(app)
 
@@ -74,10 +106,11 @@ def _find_window(name: str):
             in window.title.lower()
         ]
 
-        if matches:
-            return matches[0]
-
-        return None
+        return (
+            matches[0]
+            if matches
+            else None
+        )
 
     if app == "brave":
         matches = [
@@ -125,26 +158,14 @@ def _find_window(name: str):
             else None
         )
 
-    matches = [
-        window
-        for window in windows
-        if key in window.title.lower()
-    ]
-
-    return (
-        matches[0]
-        if matches
-        else None
-    )
+    return None
 
 
-def focus_window(name: str) -> str:
-    window = _find_window(name)
+def focus_specific_window(name: str) -> str:
+    window = _find_specific_window(name)
 
     if window is None:
-        return (
-            f"Window not found: {name}"
-        )
+        return f"Window not found: {name}"
 
     try:
         if window.isMinimized:
@@ -154,10 +175,30 @@ def focus_window(name: str) -> str:
 
         time.sleep(0.4)
 
+        return f"Focused window: {window.title}"
+
+    except Exception as exc:
         return (
-            f"Focused window: "
-            f"{window.title}"
+            f"Could not focus "
+            f"{name}: {exc}"
         )
+
+
+def focus_window(name: str) -> str:
+    window = _find_window(name)
+
+    if window is None:
+        return f"Window not found: {name}"
+
+    try:
+        if window.isMinimized:
+            window.restore()
+
+        window.activate()
+
+        time.sleep(0.4)
+
+        return f"Focused window: {window.title}"
 
     except Exception as exc:
         return (
@@ -170,9 +211,7 @@ def minimize_window(name: str) -> str:
     window = _find_window(name)
 
     if window is None:
-        return (
-            f"Window not found: {name}"
-        )
+        return f"Window not found: {name}"
 
     try:
         title = window.title
@@ -181,9 +220,7 @@ def minimize_window(name: str) -> str:
 
         time.sleep(0.3)
 
-        return (
-            f"Minimized window: {title}"
-        )
+        return f"Minimized window: {title}"
 
     except Exception as exc:
         return (
@@ -196,9 +233,7 @@ def maximize_window(name: str) -> str:
     window = _find_window(name)
 
     if window is None:
-        return (
-            f"Window not found: {name}"
-        )
+        return f"Window not found: {name}"
 
     try:
         title = window.title
@@ -207,9 +242,7 @@ def maximize_window(name: str) -> str:
 
         time.sleep(0.3)
 
-        return (
-            f"Maximized window: {title}"
-        )
+        return f"Maximized window: {title}"
 
     except Exception as exc:
         return (
@@ -222,9 +255,7 @@ def close_window(name: str) -> str:
     window = _find_window(name)
 
     if window is None:
-        return (
-            f"Window not found: {name}"
-        )
+        return f"Window not found: {name}"
 
     try:
         title = window.title
@@ -243,9 +274,7 @@ def close_window(name: str) -> str:
             None,
         )
 
-        return (
-            f"Closed window: {title}"
-        )
+        return f"Closed window: {title}"
 
     except Exception as exc:
         return (

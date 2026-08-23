@@ -6,6 +6,8 @@ import pyautogui
 import pygetwindow as gw
 from pywinauto import Desktop
 
+from app.tools.window import focus_specific_window
+
 
 def _normalize(text: str) -> str:
     text = (text or "").lower().strip()
@@ -16,17 +18,40 @@ def _normalize(text: str) -> str:
 def _get_active_window_title():
     try:
         window = gw.getActiveWindow()
+
         if window:
             return (window.title or "").strip()
+
     except Exception:
         pass
+
     return ""
+
+
+def _is_youtube_active():
+    return "youtube" in _normalize(
+        _get_active_window_title()
+    )
+
+
+def _focus_youtube():
+    result = focus_specific_window(
+        "YouTube"
+    )
+
+    if result.startswith("Focused window:"):
+        time.sleep(0.5)
+        return True
+
+    return False
 
 
 def _get_windows():
     desktop = Desktop(backend="uia")
+
     windows = [
-        w for w in desktop.windows()
+        w
+        for w in desktop.windows()
         if w.is_visible()
     ]
 
@@ -38,7 +63,9 @@ def _get_windows():
         windows.sort(
             key=lambda w: (
                 0
-                if active in _normalize(w.window_text())
+                if active in _normalize(
+                    w.window_text()
+                )
                 else 1
             )
         )
@@ -65,9 +92,14 @@ def _control_to_dict(control):
             "automation_id": (
                 control.element_info.automation_id
             ),
-            "x": (rect.left + rect.right) // 2,
-            "y": (rect.top + rect.bottom) // 2,
+            "x": (
+                rect.left + rect.right
+            ) // 2,
+            "y": (
+                rect.top + rect.bottom
+            ) // 2,
         }
+
     except Exception:
         return None
 
@@ -77,13 +109,18 @@ def _collect_controls():
     seen = set()
 
     for window in _get_windows():
+
         try:
             descendants = window.descendants()
+
         except Exception:
             continue
 
         for control in descendants:
-            item = _control_to_dict(control)
+
+            item = _control_to_dict(
+                control
+            )
 
             if item is None:
                 continue
@@ -108,6 +145,7 @@ def _collect_controls():
 
 def find_address_bar():
     for element in _collect_controls():
+
         if (
             element["control_type"] == "Edit"
             and element["class_name"]
@@ -229,15 +267,20 @@ def _is_search_candidate(element):
 
 def _find_search_box():
     controls = _collect_controls()
+
     active_browser = _get_active_browser()
 
     candidates = []
 
     for element in controls:
-        if not _is_search_candidate(element):
+
+        if not _is_search_candidate(
+            element
+        ):
             continue
 
         score = 0
+
         searchable = " ".join(
             (
                 _normalize(element["name"]),
@@ -292,6 +335,7 @@ def _semantic_candidates(
         "omnibox",
     }:
         element = find_address_bar()
+
         return (
             [element]
             if element
@@ -325,6 +369,7 @@ def _semantic_candidates(
 
     if "button" in normalized:
         requested_type = "Button"
+
     elif any(
         x in normalized
         for x in (
@@ -345,6 +390,7 @@ def _semantic_candidates(
     candidates = []
 
     for element in controls:
+
         if (
             requested_type
             and element["control_type"]
@@ -414,6 +460,7 @@ def _resolve_element(name):
     target = _normalize(name)
 
     for element in controls:
+
         if (
             _normalize(element["name"])
             == target
@@ -430,14 +477,10 @@ def find_ui_element(name: str):
         "search box",
         "search field",
         "searchbox",
-    }:
-        element = _find_search_box()
-
-        if element:
-            return element
+    } and _is_youtube_active():
 
         return {
-            "name": "search box",
+            "name": "YouTube search box",
             "control_type": "KeyboardShortcut",
             "class_name": "",
             "automation_id": "",
@@ -452,19 +495,50 @@ def find_ui_element(name: str):
 
     return {
         "name": element["name"],
-        "control_type": element["control_type"],
-        "class_name": element["class_name"],
-        "automation_id": element["automation_id"],
+        "control_type": element[
+            "control_type"
+        ],
+        "class_name": element[
+            "class_name"
+        ],
+        "automation_id": element[
+            "automation_id"
+        ],
         "x": element["x"],
         "y": element["y"],
     }
 
 
 def click_ui_element(name: str) -> str:
+    normalized = _normalize(name)
+
+    if normalized in {
+        "search box",
+        "search field",
+        "searchbox",
+    }:
+
+        if not _is_youtube_active():
+
+            if not _focus_youtube():
+                return (
+                    "YouTube window not found"
+                )
+
+        pyautogui.press("/")
+
+        time.sleep(0.5)
+
+        return (
+            "Focused YouTube search box"
+        )
+
     element = _resolve_element(name)
 
     if element is None:
-        return f"UI element not found: {name}"
+        return (
+            f"UI element not found: {name}"
+        )
 
     pyautogui.moveTo(
         element["x"],
@@ -481,21 +555,6 @@ def click_ui_element(name: str) -> str:
     )
 
 
-def _keyboard_search(text):
-    pyautogui.press("/")
-    time.sleep(0.4)
-
-    pyautogui.write(
-        text,
-        interval=0.03,
-    )
-
-    return (
-        f"Typed '{text}' using "
-        f"browser search shortcut"
-    )
-
-
 def type_into_ui_element(
     name: str,
     text: str,
@@ -508,16 +567,37 @@ def type_into_ui_element(
         "search field",
         "searchbox",
     }:
-        element = _find_search_box()
 
-        if element is None:
-            return _keyboard_search(text)
+        if not _is_youtube_active():
 
-    else:
-        element = _resolve_element(name)
+            if not _focus_youtube():
+                return (
+                    "YouTube window not found"
+                )
+
+            time.sleep(0.5)
+
+        pyautogui.press("/")
+
+        time.sleep(0.5)
+
+        pyautogui.write(
+            text,
+            interval=0.03,
+        )
+
+        return (
+            f"Typed '{text}' into "
+            "YouTube search box"
+        )
+
+    element = _resolve_element(name)
 
     if element is None:
-        return f"UI element not found: {name}"
+        return (
+            f"UI element not found: "
+            f"{name}"
+        )
 
     pyautogui.moveTo(
         element["x"],
@@ -526,6 +606,8 @@ def type_into_ui_element(
     )
 
     pyautogui.click()
+
+    time.sleep(0.2)
 
     pyautogui.hotkey(
         "ctrl",
@@ -547,7 +629,9 @@ def read_ui_element(name: str) -> str:
     element = _resolve_element(name)
 
     if element is None:
-        return f"UI element not found: {name}"
+        return (
+            f"UI element not found: {name}"
+        )
 
     return (
         f"{element['name']} | "

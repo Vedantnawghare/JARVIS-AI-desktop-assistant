@@ -1,5 +1,6 @@
 import re
 import time
+
 import soundfile as sf
 
 from app.voice.kokoro_tts import KokoroTTS
@@ -15,6 +16,11 @@ from app.tools.system import (
     open_application,
     open_path,
     close_application,
+    volume_up,
+    volume_down,
+    mute,
+    unmute,
+    lock_pc,
 )
 
 from app.tools.desktop import (
@@ -99,6 +105,31 @@ class Jarvis:
         self.registry.register(
             "maximize_window",
             maximize_window,
+        )
+
+        self.registry.register(
+            "volume_up",
+            volume_up,
+        )
+
+        self.registry.register(
+            "volume_down",
+            volume_down,
+        )
+
+        self.registry.register(
+            "mute",
+            mute,
+        )
+
+        self.registry.register(
+            "unmute",
+            unmute,
+        )
+
+        self.registry.register(
+            "lock_pc",
+            lock_pc,
         )
 
         self.registry.register(
@@ -387,6 +418,7 @@ class Jarvis:
             "run_command",
             "shutdown_computer",
             "restart_computer",
+            "lock_pc",
         }
 
         if (
@@ -787,6 +819,11 @@ class Jarvis:
                 "I'll remember",
                 "is ",
                 "I forgot ",
+                "Volume increased",
+                "Volume decreased",
+                "Volume muted",
+                "Volume unmuted",
+                "PC locked",
             )
 
             for prefix in prefixes:

@@ -4,6 +4,9 @@ import pyautogui
 
 
 def move_mouse(x: int, y: int) -> str:
+    x = int(x)
+    y = int(y)
+
     pyautogui.moveTo(
         x,
         y,
@@ -16,13 +19,16 @@ def move_mouse(x: int, y: int) -> str:
 
 
 def click(x: int, y: int) -> str:
+    x = int(x)
+    y = int(y)
+
     pyautogui.moveTo(
         x,
         y,
         duration=0.25,
     )
 
-    time.sleep(0.3)
+    time.sleep(0.2)
 
     pyautogui.click()
 
@@ -30,13 +36,16 @@ def click(x: int, y: int) -> str:
 
 
 def double_click(x: int, y: int) -> str:
+    x = int(x)
+    y = int(y)
+
     pyautogui.moveTo(
         x,
         y,
         duration=0.25,
     )
 
-    time.sleep(0.3)
+    time.sleep(0.2)
 
     pyautogui.doubleClick()
 
@@ -44,6 +53,10 @@ def double_click(x: int, y: int) -> str:
 
 
 def scroll(amount: int) -> str:
+    amount = int(amount)
+
     pyautogui.scroll(amount)
+
+    time.sleep(0.3)
 
     return f"Scrolled {amount}"
