@@ -67,6 +67,14 @@ from app.tools.memory import (
     forget,
 )
 
+from app.tools.files import (
+    open_file_explorer,
+    open_file_or_folder,
+    copy_file_or_folder,
+    move_file_or_folder,
+    delete_file_or_folder,
+)
+
 
 WAKE_AUDIO = "tests/audio/wake_word.wav"
 COMMAND_AUDIO = "tests/audio/command.wav"
@@ -245,6 +253,31 @@ class Jarvis:
         self.registry.register(
             "forget",
             forget,
+        )
+
+        self.registry.register(
+            "open_file_explorer",
+            open_file_explorer,
+        )
+
+        self.registry.register(
+            "open_file_or_folder",
+            open_file_or_folder,
+        )
+
+        self.registry.register(
+            "copy_file_or_folder",
+            copy_file_or_folder,
+        )
+
+        self.registry.register(
+            "move_file_or_folder",
+            move_file_or_folder,
+        )
+
+        self.registry.register(
+            "delete_file_or_folder",
+            delete_file_or_folder,
         )
 
         print("Loading Kokoro...")
@@ -479,6 +512,7 @@ class Jarvis:
         high_risk_tools = {
             "delete_file",
             "delete_path",
+            "delete_file_or_folder",
             "send_message",
             "send_email",
             "run_command",
@@ -624,11 +658,26 @@ class Jarvis:
 
                     recovery_count += 1
 
-                    recovery_plan = recover(
-                        user_text,
-                        tool_name,
-                        str(exc),
-                    )
+                    try:
+
+                        recovery_plan = recover(
+                            user_text,
+                            tool_name,
+                            str(exc),
+                        )
+
+                    except Exception as recovery_exc:
+
+                        print(
+                            "Recovery failed: "
+                            f"{recovery_exc}"
+                        )
+
+                        return {
+                            "success": False,
+                            "results": results,
+                            "error": str(exc),
+                        }
 
                     print(
                         "Recovery plan:",
@@ -702,12 +751,24 @@ class Jarvis:
                 "content": (
                     "Use the existing Chrome "
                     "window for browser tasks. "
+                    "When the user asks to open "
+                    "a website, navigate to that "
+                    "website using the browser UI "
+                    "or open_url. "
+                    "Do not reinterpret a specific "
+                    "website request as opening Google. "
                     "For YouTube searches, use "
-                    "the youtube_search tool. "
-                    "For opening Google, use "
-                    "open_google. "
-                    "For opening YouTube, use "
-                    "open_youtube."
+                    "youtube_search when appropriate. "
+                    "For file operations, use the "
+                    "registered file tools. "
+                    "Use open_file_explorer for File "
+                    "Explorer. "
+                    "Use open_file_or_folder for a "
+                    "specific file or folder. "
+                    "Use copy_file_or_folder for copying. "
+                    "Use move_file_or_folder for moving. "
+                    "Use delete_file_or_folder for deletion. "
+                    "Do not invent tool names."
                 ),
             }
         )
@@ -1002,10 +1063,8 @@ class Jarvis:
                     "I'll remember that, Sir."
                 )
 
-            if (
-                result.startswith(
-                    "I forgot"
-                )
+            if result.startswith(
+                "I forgot"
             ):
                 return "Forgotten, Sir."
 
@@ -1044,6 +1103,41 @@ class Jarvis:
             ):
                 return "Done, Sir."
 
+            if result.startswith(
+                "Opened file explorer"
+            ):
+                return (
+                    "File Explorer is open, Sir."
+                )
+
+            if result.startswith(
+                "Opened file or folder"
+            ):
+                return (
+                    "Opened it, Sir."
+                )
+
+            if result.startswith(
+                "Copied"
+            ):
+                return (
+                    "Copied successfully, Sir."
+                )
+
+            if result.startswith(
+                "Moved"
+            ):
+                return (
+                    "Moved successfully, Sir."
+                )
+
+            if result.startswith(
+                "Deleted"
+            ):
+                return (
+                    "Deleted successfully, Sir."
+                )
+
             return result
 
         joined = "\n".join(
@@ -1075,6 +1169,24 @@ class Jarvis:
             in joined
         ):
             return "There you go, Sir."
+
+        if (
+            "Copied"
+            in joined
+        ):
+            return "Copied successfully, Sir."
+
+        if (
+            "Moved"
+            in joined
+        ):
+            return "Moved successfully, Sir."
+
+        if (
+            "Deleted"
+            in joined
+        ):
+            return "Deleted successfully, Sir."
 
         return "All set, Sir."
 
@@ -1272,79 +1384,77 @@ class Jarvis:
         text,
     ):
 
+        text = text.strip()
+
+        if not text:
+            return
+
+        if self.is_shutdown_command(
+            text
+        ):
+
+            self.shutdown()
+            return
+
         result = self.process_command(
             text
         )
 
-        if (
-            result["type"]
-            == "response"
-        ):
+        if result is None:
+            return
 
-            response = result[
-                "content"
-            ]
+        content = result.get(
+            "content",
+            "",
+        )
 
-            print(
-                f"\nJARVIS: {response}"
+        if not content:
+            return
+
+        print(
+            f"\nJARVIS: {content}"
+        )
+
+        self.tts.speak(
+            self.clean_for_speech(
+                content
             )
-
-            self.tts.speak(
-                self.clean_for_speech(
-                    response
-                )
-            )
-
-        elif (
-            result["type"]
-            == "direct"
-        ):
-
-            response = (
-                self.clean_for_speech(
-                    result["content"]
-                )
-            )
-
-            print(
-                f"\nJARVIS: {response}"
-            )
-
-            self.tts.speak(
-                response
-            )
-
-        elif (
-            result["type"]
-            == "stream"
-        ):
-
-            self.speak_stream(
-                result["content"]
-            )
+        )
 
     def run(self):
 
-        try:
+        while self.running:
 
-            if not self.wait_for_activation():
-                return
+            try:
 
-            while (
-                self.running
-                and self.active
-            ):
+                if not self.active:
+
+                    activated = (
+                        self.wait_for_activation()
+                    )
+
+                    if not activated:
+                        break
 
                 audio, text = (
                     self.listen_for_authenticated_command()
                 )
 
-                if not text.strip():
+                text = text.strip()
+
+                if not text:
                     continue
 
                 print(
                     f"\nYou: {text}"
                 )
+
+                if self.is_shutdown_command(
+                    text
+                ):
+
+                    self.shutdown()
+                    break
 
                 if not self.authenticate_audio(
                     audio
@@ -1356,36 +1466,68 @@ class Jarvis:
 
                     continue
 
-                if self.is_shutdown_command(
-                    text
-                ):
-
-                    self.shutdown()
-
-                    break
-
                 self.handle_command(
                     text
                 )
 
-        except KeyboardInterrupt:
+            except KeyboardInterrupt:
 
-            print(
-                "\nStopping JARVIS..."
-            )
+                print(
+                    "\nStopping Jarvis..."
+                )
 
-        finally:
+                self.running = False
+                self.active = False
 
-            self.running = False
-            self.active = False
+            except Exception as exc:
 
-            print(
-                "\nJARVIS stopped."
-            )
+                print(
+                    "\nJARVIS ERROR:"
+                )
+
+                print(
+                    repr(exc)
+                )
+
+                self.active = False
+
+                try:
+
+                    self.tts.speak(
+                        "Something went wrong. "
+                        "Please try again, Sir."
+                    )
+
+                except Exception:
+                    pass
+
+                time.sleep(0.5)
+
+        print(
+            "\nJARVIS stopped."
+        )
 
 
 if __name__ == "__main__":
 
     jarvis = Jarvis()
 
-    jarvis.run()
+    try:
+
+        jarvis.run()
+
+    except KeyboardInterrupt:
+
+        print(
+            "\nJARVIS stopped."
+        )
+
+    except Exception as exc:
+
+        print(
+            "\nFatal JARVIS error:"
+        )
+
+        print(
+            repr(exc)
+        )
