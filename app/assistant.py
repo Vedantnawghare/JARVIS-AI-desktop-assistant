@@ -1,6 +1,5 @@
 import re
 import time
-from datetime import datetime
 
 import soundfile as sf
 
@@ -22,15 +21,6 @@ from app.tools.system import (
     mute,
     unmute,
     lock_pc,
-)
-
-from app.tools.browser import (
-    youtube_search,
-    open_url,
-    open_google,
-    open_youtube,
-    open_github,
-    open_gmail,
 )
 
 from app.tools.desktop import (
@@ -70,6 +60,8 @@ from app.tools.memory import (
 from app.tools.files import (
     open_file_explorer,
     open_file_or_folder,
+    create_folder,
+    create_file,
     copy_file_or_folder,
     move_file_or_folder,
     delete_file_or_folder,
@@ -123,36 +115,6 @@ class Jarvis:
         self.registry.register(
             "maximize_window",
             maximize_window,
-        )
-
-        self.registry.register(
-            "open_url",
-            open_url,
-        )
-
-        self.registry.register(
-            "open_google",
-            open_google,
-        )
-
-        self.registry.register(
-            "open_youtube",
-            open_youtube,
-        )
-
-        self.registry.register(
-            "open_github",
-            open_github,
-        )
-
-        self.registry.register(
-            "open_gmail",
-            open_gmail,
-        )
-
-        self.registry.register(
-            "youtube_search",
-            youtube_search,
         )
 
         self.registry.register(
@@ -266,6 +228,16 @@ class Jarvis:
         )
 
         self.registry.register(
+            "create_folder",
+            create_folder,
+        )
+
+        self.registry.register(
+            "create_file",
+            create_file,
+        )
+
+        self.registry.register(
             "copy_file_or_folder",
             copy_file_or_folder,
         )
@@ -294,21 +266,6 @@ class Jarvis:
         self.context = []
 
         self.max_recovery_attempts = 2
-
-    def get_time_greeting(self):
-
-        hour = datetime.now().hour
-
-        if 5 <= hour < 12:
-            return "Good morning, Sir."
-
-        if 12 <= hour < 17:
-            return "Good afternoon, Sir."
-
-        if 17 <= hour < 21:
-            return "Good evening, Sir."
-
-        return "Good night, Sir."
 
     def normalize_text(self, text):
 
@@ -428,20 +385,9 @@ class Jarvis:
 
     def wait_for_activation(self):
 
-        greeting = self.get_time_greeting()
-
-        startup_message = (
-            f"{greeting} "
-            "Jarvis is online and ready. "
-            "Say Hey Jarvis."
-        )
-
         print(
-            f"\n{startup_message}"
-        )
-
-        self.tts.speak(
-            startup_message
+            "\nJARVIS is idle. "
+            "Say 'Hey Jarvis'..."
         )
 
         while self.running:
@@ -479,7 +425,7 @@ class Jarvis:
             )
 
             self.tts.speak(
-                "Yes, Sir. How can I help?"
+                "Yes?"
             )
 
             return True
@@ -512,7 +458,6 @@ class Jarvis:
         high_risk_tools = {
             "delete_file",
             "delete_path",
-            "delete_file_or_folder",
             "send_message",
             "send_email",
             "run_command",
@@ -658,26 +603,11 @@ class Jarvis:
 
                     recovery_count += 1
 
-                    try:
-
-                        recovery_plan = recover(
-                            user_text,
-                            tool_name,
-                            str(exc),
-                        )
-
-                    except Exception as recovery_exc:
-
-                        print(
-                            "Recovery failed: "
-                            f"{recovery_exc}"
-                        )
-
-                        return {
-                            "success": False,
-                            "results": results,
-                            "error": str(exc),
-                        }
+                    recovery_plan = recover(
+                        user_text,
+                        tool_name,
+                        str(exc),
+                    )
 
                     print(
                         "Recovery plan:",
@@ -749,26 +679,10 @@ class Jarvis:
             {
                 "role": "system",
                 "content": (
-                    "Use the existing Chrome "
-                    "window for browser tasks. "
-                    "When the user asks to open "
-                    "a website, navigate to that "
-                    "website using the browser UI "
-                    "or open_url. "
-                    "Do not reinterpret a specific "
-                    "website request as opening Google. "
-                    "For YouTube searches, use "
-                    "youtube_search when appropriate. "
-                    "For file operations, use the "
-                    "registered file tools. "
-                    "Use open_file_explorer for File "
-                    "Explorer. "
-                    "Use open_file_or_folder for a "
-                    "specific file or folder. "
-                    "Use copy_file_or_folder for copying. "
-                    "Use move_file_or_folder for moving. "
-                    "Use delete_file_or_folder for deletion. "
-                    "Do not invent tool names."
+                    "Use the currently visible "
+                    "browser through UI automation. "
+                    "Do not launch another browser "
+                    "for navigation or search."
                 ),
             }
         )
@@ -923,7 +837,7 @@ class Jarvis:
     ):
 
         if not results:
-            return "All set, Sir."
+            return "Done."
 
         if len(results) == 1:
 
@@ -931,264 +845,48 @@ class Jarvis:
                 results[0]
             )
 
-            if (
-                "Opened Google"
-                in result
-            ):
-                return "Google is open, Sir."
+            prefixes = (
+                "Opened and focused ",
+                "Opened ",
+                "Closed application: ",
+                "Focused window: ",
+                "Minimized window: ",
+                "Maximized window: ",
+                "Typed: ",
+                "Pressed: ",
+                "Clicked at ",
+                "Double-clicked at ",
+                "Moved mouse to ",
+                "Scrolled ",
+                "Found ",
+                "Clicked ",
+                "Typed ",
+                "I'll remember",
+                "is ",
+                "I forgot ",
+                "Volume increased",
+                "Volume decreased",
+                "Volume muted",
+                "Volume unmuted",
+                "PC locked",
+                "Created folder:",
+                "Created file:",
+                "Copied ",
+                "Moved ",
+                "Deleted:",
+                "Opened This PC",
+            )
 
-            if (
-                "Opened YouTube"
-                in result
-            ):
-                return "YouTube is open, Sir."
+            for prefix in prefixes:
 
-            if (
-                result.startswith(
-                    "Opened and focused "
-                )
-            ):
-                return (
-                    "It's open and ready, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "Opened application:"
-                )
-            ):
-                return "It's open, Sir."
-
-            if (
-                result.startswith(
-                    "Closed application:"
-                )
-            ):
-                return "Closed, Sir."
-
-            if (
-                result.startswith(
-                    "Focused window:"
-                )
-            ):
-                return (
-                    "Switched over, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "Minimized window:"
-                )
-            ):
-                return "Minimized, Sir."
-
-            if (
-                result.startswith(
-                    "Maximized window:"
-                )
-            ):
-                return "Maximized, Sir."
-
-            if (
-                result.startswith(
-                    "Screenshot saved to"
-                )
-            ):
-                return (
-                    "Screenshot captured "
-                    "and saved, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "Volume increased"
-                )
-            ):
-                return (
-                    "Volume increased, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "Volume decreased"
-                )
-            ):
-                return (
-                    "Volume decreased, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "Volume muted"
-                )
-            ):
-                return (
-                    "Volume muted, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "Volume unmuted"
-                )
-            ):
-                return (
-                    "Volume unmuted, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "PC locked"
-                )
-            ):
-                return (
-                    "Your PC is locked, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "YouTube search opened"
-                )
-            ):
-                return (
-                    "YouTube search is "
-                    "ready, Sir."
-                )
-
-            if (
-                result.startswith(
-                    "I'll remember"
-                )
-            ):
-                return (
-                    "I'll remember that, Sir."
-                )
-
-            if result.startswith(
-                "I forgot"
-            ):
-                return "Forgotten, Sir."
-
-            if result.startswith(
-                "Found"
-            ):
-                return "Found it, Sir."
-
-            if result.startswith(
-                "Clicked"
-            ):
-                return "Clicked, Sir."
-
-            if result.startswith(
-                "Double-clicked"
-            ):
-                return "Done, Sir."
-
-            if result.startswith(
-                "Moved mouse"
-            ):
-                return "Moved, Sir."
-
-            if result.startswith(
-                "Scrolled"
-            ):
-                return "Scrolled, Sir."
-
-            if result.startswith(
-                "Typed"
-            ):
-                return "Done, Sir."
-
-            if result.startswith(
-                "Pressed"
-            ):
-                return "Done, Sir."
-
-            if result.startswith(
-                "Opened file explorer"
-            ):
-                return (
-                    "File Explorer is open, Sir."
-                )
-
-            if result.startswith(
-                "Opened file or folder"
-            ):
-                return (
-                    "Opened it, Sir."
-                )
-
-            if result.startswith(
-                "Copied"
-            ):
-                return (
-                    "Copied successfully, Sir."
-                )
-
-            if result.startswith(
-                "Moved"
-            ):
-                return (
-                    "Moved successfully, Sir."
-                )
-
-            if result.startswith(
-                "Deleted"
-            ):
-                return (
-                    "Deleted successfully, Sir."
-                )
+                if result.startswith(
+                    prefix
+                ):
+                    return result
 
             return result
 
-        joined = "\n".join(
-            str(result)
-            for result in results
-        )
-
-        if any(
-            "Screenshot saved to"
-            in str(result)
-            for result in results
-        ):
-            return (
-                "Screenshot captured "
-                "and saved, Sir."
-            )
-
-        if (
-            "YouTube search opened"
-            in joined
-        ):
-            return (
-                "YouTube search is "
-                "ready, Sir."
-            )
-
-        if (
-            "Pressed: enter"
-            in joined
-        ):
-            return "There you go, Sir."
-
-        if (
-            "Copied"
-            in joined
-        ):
-            return "Copied successfully, Sir."
-
-        if (
-            "Moved"
-            in joined
-        ):
-            return "Moved successfully, Sir."
-
-        if (
-            "Deleted"
-            in joined
-        ):
-            return "Deleted successfully, Sir."
-
-        return "All set, Sir."
+        return "Done."
 
     def clean_for_speech(
         self,
@@ -1340,7 +1038,6 @@ class Jarvis:
                     )
 
                     if sentence:
-
                         self.tts.speak_sentence(
                             sentence
                         )
@@ -1354,7 +1051,6 @@ class Jarvis:
             )
 
             if sentence:
-
                 self.tts.speak_sentence(
                     sentence
                 )
@@ -1364,7 +1060,7 @@ class Jarvis:
     def shutdown(self):
 
         message = (
-            "Bye-bye, Sir. "
+            "Bye-bye, sir. "
             "Shutting down Jarvis."
         )
 
@@ -1384,150 +1080,116 @@ class Jarvis:
         text,
     ):
 
-        text = text.strip()
-
-        if not text:
-            return
-
-        if self.is_shutdown_command(
-            text
-        ):
-
-            self.shutdown()
-            return
-
         result = self.process_command(
             text
         )
 
-        if result is None:
-            return
+        if (
+            result["type"]
+            == "response"
+        ):
 
-        content = result.get(
-            "content",
-            "",
-        )
+            response = result[
+                "content"
+            ]
 
-        if not content:
-            return
-
-        print(
-            f"\nJARVIS: {content}"
-        )
-
-        self.tts.speak(
-            self.clean_for_speech(
-                content
+            print(
+                f"\nJARVIS: {response}"
             )
-        )
+
+            self.tts.speak(
+                self.clean_for_speech(
+                    response
+                )
+            )
+
+        elif (
+            result["type"]
+            == "direct"
+        ):
+
+            response = (
+                self.clean_for_speech(
+                    result["content"]
+                )
+            )
+
+            print(
+                f"\nJARVIS: {response}"
+            )
+
+            self.tts.speak(
+                response
+            )
+
+        elif (
+            result["type"]
+            == "stream"
+        ):
+
+            self.speak_stream(
+                result["content"]
+            )
 
     def run(self):
 
-        while self.running:
+        try:
 
-            try:
+            if not self.wait_for_activation():
+                return
 
-                if not self.active:
-
-                    activated = (
-                        self.wait_for_activation()
-                    )
-
-                    if not activated:
-                        break
+            while (
+                self.running
+                and self.active
+            ):
 
                 audio, text = (
                     self.listen_for_authenticated_command()
                 )
 
-                text = text.strip()
-
-                if not text:
+                if not text.strip():
                     continue
 
                 print(
                     f"\nYou: {text}"
                 )
 
-                if self.is_shutdown_command(
-                    text
-                ):
-
-                    self.shutdown()
-                    break
-
                 if not self.authenticate_audio(
                     audio
                 ):
-
                     print(
                         "Command rejected."
                     )
-
                     continue
+
+                if self.is_shutdown_command(
+                    text
+                ):
+                    self.shutdown()
+                    break
 
                 self.handle_command(
                     text
                 )
 
-            except KeyboardInterrupt:
+        except KeyboardInterrupt:
 
-                print(
-                    "\nStopping Jarvis..."
-                )
+            print(
+                "\nStopping JARVIS..."
+            )
 
-                self.running = False
-                self.active = False
+        finally:
 
-            except Exception as exc:
+            self.running = False
+            self.active = False
 
-                print(
-                    "\nJARVIS ERROR:"
-                )
-
-                print(
-                    repr(exc)
-                )
-
-                self.active = False
-
-                try:
-
-                    self.tts.speak(
-                        "Something went wrong. "
-                        "Please try again, Sir."
-                    )
-
-                except Exception:
-                    pass
-
-                time.sleep(0.5)
-
-        print(
-            "\nJARVIS stopped."
-        )
+            print(
+                "\nJARVIS stopped."
+            )
 
 
 if __name__ == "__main__":
 
     jarvis = Jarvis()
 
-    try:
-
-        jarvis.run()
-
-    except KeyboardInterrupt:
-
-        print(
-            "\nJARVIS stopped."
-        )
-
-    except Exception as exc:
-
-        print(
-            "\nFatal JARVIS error:"
-        )
-
-        print(
-            repr(exc)
-        )
+    jarvis.run()

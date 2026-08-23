@@ -1,4 +1,5 @@
 import json
+import re
 
 from app.brain.llm import ask
 
@@ -49,6 +50,8 @@ File System:
 - copy_file_or_folder(source, destination)
 - move_file_or_folder(source, destination)
 - delete_file_or_folder(path)
+- create_folder(path)
+- create_file(path, content)
 
 Memory:
 - remember(key, value)
@@ -255,27 +258,12 @@ open_file_explorer(
 
 KNOWN WINDOWS FOLDERS
 
-FOLDER NAVIGATION RULE
-
-When the user refers to a known Windows folder using
-"open", "go to", "take me to", "show", or similar
-navigation language, open the local Windows folder.
-
-Do NOT interpret these commands as Google searches.
-
 For Downloads:
 
 "Open Downloads"
 "Open my Downloads"
 "Open Downloads folder"
 "Open my Downloads folder"
-"Go to Downloads"
-"Go to my Downloads"
-"Go to Downloads folder"
-"Take me to Downloads"
-"Take me to my Downloads"
-"Show Downloads"
-"Show my Downloads"
 
 Use:
 
@@ -290,13 +278,6 @@ For Documents:
 "Open my Documents"
 "Open Documents folder"
 "Open my Documents folder"
-"Go to Documents"
-"Go to my Documents"
-"Go to Documents folder"
-"Take me to Documents"
-"Take me to my Documents"
-"Show Documents"
-"Show my Documents"
 
 Use:
 
@@ -310,13 +291,6 @@ For Desktop:
 "Open Desktop"
 "Open my Desktop"
 "Open Desktop folder"
-"Go to Desktop"
-"Go to my Desktop"
-"Go to Desktop folder"
-"Take me to Desktop"
-"Take me to my Desktop"
-"Show Desktop"
-"Show my Desktop"
 
 Use:
 
@@ -330,13 +304,6 @@ For Pictures:
 "Open Pictures"
 "Open my Pictures"
 "Open Pictures folder"
-"Go to Pictures"
-"Go to my Pictures"
-"Go to Pictures folder"
-"Take me to Pictures"
-"Take me to my Pictures"
-"Show Pictures"
-"Show my Pictures"
 
 Use:
 
@@ -344,31 +311,6 @@ open_file_or_folder(
     path="%USERPROFILE%\\Pictures"
 )
 
-THIS PC
-
-The following commands mean opening Windows This PC:
-
-"Open This PC"
-"Open my PC"
-"Open Computer"
-"Open My Computer"
-"Go to This PC"
-"Go to my PC"
-"Go to Computer"
-"Take me to This PC"
-"Take me to my PC"
-"Show This PC"
-
-Use:
-
-open_file_explorer(
-    path="this_pc"
-)
-
-IMPORTANT:
-Do NOT use path="" for This PC.
-Do NOT use the user's home directory.
-Do NOT search Google.
 
 OPEN EXACT FILE OR FOLDER
 
@@ -427,6 +369,168 @@ and there is no information about where abc is located,
 do not guess.
 
 Ask the user where the file or folder is located.
+
+
+CREATE FOLDERS
+
+Folder creation is a direct file-system operation.
+
+If the user asks to:
+
+"Create a folder"
+"Create a folder called X"
+"Create folder X"
+"Make a folder"
+"Make a folder called X"
+"Make folder X"
+"New folder X"
+"Create a directory"
+"Make a directory"
+
+you MUST use:
+
+create_folder(path)
+
+
+NEVER use:
+
+open_file_explorer
+open_file_or_folder
+type_into_ui_element
+press_key
+
+for folder creation.
+
+
+Examples:
+
+"Create a folder called Projects in Documents"
+
+Use:
+
+create_folder(
+    path="%USERPROFILE%\\Documents\\Projects"
+)
+
+
+"Create Projects folder in Documents"
+
+Use:
+
+create_folder(
+    path="%USERPROFILE%\\Documents\\Projects"
+)
+
+
+"Make a folder called Notes on Desktop"
+
+Use:
+
+create_folder(
+    path="%USERPROFILE%\\Desktop\\Notes"
+)
+
+
+"Create Test folder in Downloads"
+
+Use:
+
+create_folder(
+    path="%USERPROFILE%\\Downloads\\Test"
+)
+
+
+Known destinations:
+
+Downloads:
+%USERPROFILE%\\Downloads
+
+Documents:
+%USERPROFILE%\\Documents
+
+Desktop:
+%USERPROFILE%\\Desktop
+
+Pictures:
+%USERPROFILE%\\Pictures
+
+
+CREATE FILES
+
+File creation is a direct file-system operation.
+
+If the user asks to:
+
+"Create a file"
+"Create a file called X"
+"Create file X"
+"Make a file"
+"Make a file called X"
+"Make file X"
+"New file X"
+"Create a text file"
+"Make a text file"
+
+you MUST use:
+
+create_file(path, content)
+
+
+NEVER use:
+
+open_file_explorer
+open_file_or_folder
+type_into_ui_element
+press_key
+
+for file creation.
+
+
+Examples:
+
+"Create notes.txt on Desktop"
+
+Use:
+
+create_file(
+    path="%USERPROFILE%\\Desktop\\notes.txt",
+    content=""
+)
+
+
+"Create notes.txt in Documents"
+
+Use:
+
+create_file(
+    path="%USERPROFILE%\\Documents\\notes.txt",
+    content=""
+)
+
+
+"Create a text file called notes.txt on Desktop containing Hello Jarvis"
+
+Use:
+
+create_file(
+    path="%USERPROFILE%\\Desktop\\notes.txt",
+    content="Hello Jarvis"
+)
+
+
+Known destinations:
+
+Downloads:
+%USERPROFILE%\\Downloads
+
+Documents:
+%USERPROFILE%\\Documents
+
+Desktop:
+%USERPROFILE%\\Desktop
+
+Pictures:
+%USERPROFILE%\\Pictures
 
 
 COPY FILES
@@ -630,7 +734,6 @@ Do not hardcode another user's username when a standard Windows folder is being 
 
 If the user provides an exact path, use the exact path.
 
-
 BROWSER RULES
 
 IMPORTANT:
@@ -647,6 +750,7 @@ Do NOT use:
 - open_chrome
 
 Use the existing desktop and UI tools instead.
+
 
 If Chrome is already open, use the existing Chrome window.
 
@@ -1012,6 +1116,138 @@ def decide(
     context: list[dict] | None = None,
 ) -> dict:
 
+    command = user_input.strip()
+    lower = command.lower()
+
+    known_locations = {
+        "downloads": "%USERPROFILE%\\Downloads",
+        "documents": "%USERPROFILE%\\Documents",
+        "desktop": "%USERPROFILE%\\Desktop",
+        "pictures": "%USERPROFILE%\\Pictures",
+    }
+
+    # ============================================================
+    # DETERMINISTIC FOLDER CREATION
+    # ============================================================
+
+    folder_creation_phrases = (
+        "create a folder",
+        "create folder",
+        "make a folder",
+        "make folder",
+        "new folder",
+        "create a directory",
+        "make a directory",
+    )
+
+    if any(
+        phrase in lower
+        for phrase in folder_creation_phrases
+    ):
+
+        match = re.search(
+            r"(?:called|named)\s+(.+?)\s+(?:in|on)\s+"
+            r"(downloads|documents|desktop|pictures)\s*$",
+            lower,
+        )
+
+        if not match:
+
+            match = re.search(
+                r"folder\s+(.+?)\s+(?:in|on)\s+"
+                r"(downloads|documents|desktop|pictures)\s*$",
+                lower,
+            )
+
+        if match:
+
+            folder_name = match.group(1).strip()
+            location = match.group(2).strip()
+
+            folder_name = re.sub(
+                r"^(?:a|an|the)\s+",
+                "",
+                folder_name,
+                flags=re.IGNORECASE,
+            )
+
+            return {
+                "action": "plan",
+                "steps": [
+                    {
+                        "tool": "create_folder",
+                        "arguments": {
+                            "path": (
+                                known_locations[location]
+                                + "\\"
+                                + folder_name
+                            )
+                        },
+                    }
+                ],
+            }
+
+
+    # ============================================================
+    # DETERMINISTIC FILE CREATION
+    # ============================================================
+
+    file_creation_phrases = (
+        "create a file",
+        "create file",
+        "make a file",
+        "make file",
+        "new file",
+        "create a text file",
+        "make a text file",
+    )
+
+    if any(
+        phrase in lower
+        for phrase in file_creation_phrases
+    ):
+
+        match = re.search(
+            r"(?:called|named)\s+([^\s]+)\s+(?:in|on)\s+"
+            r"(downloads|documents|desktop|pictures)\s*$",
+            lower,
+        )
+
+        if not match:
+
+            match = re.search(
+                r"file\s+([^\s]+)\s+(?:in|on)\s+"
+                r"(downloads|documents|desktop|pictures)\s*$",
+                lower,
+            )
+
+        if match:
+
+            filename = match.group(1).strip()
+            location = match.group(2).strip()
+
+            return {
+                "action": "plan",
+                "steps": [
+                    {
+                        "tool": "create_file",
+                        "arguments": {
+                            "path": (
+                                known_locations[location]
+                                + "\\"
+                                + filename
+                            ),
+                            "content": "",
+                        },
+                    }
+                ],
+            }
+
+
+    # ============================================================
+    # NORMAL LLM PLANNER
+    # ============================================================
+
     context = context or []
 
     recent = context[-8:]
@@ -1048,7 +1284,6 @@ def decide(
             "Invalid JARVIS JSON:\n"
             + response
         ) from exc
-
 
 def recover(
     user_input: str,
@@ -1100,9 +1335,12 @@ AVAILABLE TOOLS:
 - copy_file_or_folder
 - move_file_or_folder
 - delete_file_or_folder
+- create_folder
+- create_file
 - remember
 - recall
 - forget
+
 
 RECOVERY RULES:
 
@@ -1123,6 +1361,7 @@ press_key(
     key="enter"
 )
 
+
 4. For Google or YouTube search use:
 
 type_into_ui_element(
@@ -1136,13 +1375,16 @@ press_key(
     key="enter"
 )
 
+
 5. If Chrome is required, use:
 
 open_application("Chrome")
 
+
 6. If Chrome is already open, use:
 
 focus_window("Chrome")
+
 
 7. For File Explorer use:
 
@@ -1150,11 +1392,13 @@ open_file_explorer(
     path=""
 )
 
+
 8. For opening an exact file or folder use:
 
 open_file_or_folder(
     path="<path>"
 )
+
 
 9. For copying a file or folder use:
 
@@ -1163,6 +1407,7 @@ copy_file_or_folder(
     destination="<destination>"
 )
 
+
 10. For moving a file or folder use:
 
 move_file_or_folder(
@@ -1170,15 +1415,32 @@ move_file_or_folder(
     destination="<destination>"
 )
 
+
 11. For deleting a file or folder use:
 
 delete_file_or_folder(
     path="<path>"
 )
 
-12. Never guess an unknown file or folder path.
 
-13. Do not use:
+12. For creating a folder use:
+
+create_folder(
+    path="<path>"
+)
+
+
+13. For creating a file use:
+
+create_file(
+    path="<path>",
+    content="<content>"
+)
+
+
+14. Never guess an unknown file or folder path.
+
+15. Do not use:
 
 open_google
 open_youtube
@@ -1186,7 +1448,15 @@ open_url
 youtube_search
 search_youtube
 
-14. Use the smallest number of actions.
+
+16. Use the smallest number of actions.
+
+
+17. If the failed tool was related to file/folder creation,
+do NOT fall back to Explorer typing.
+
+Use the appropriate direct file-system tool instead.
+
 
 Return:
 
