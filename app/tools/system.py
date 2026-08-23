@@ -133,16 +133,60 @@ def _window_ids():
     return ids
 
 
-def _find_new_chrome_window(before_ids):
+def _chrome_windows():
+    windows = []
+
     for window in gw.getAllWindows():
         try:
-            if not window.title:
-                continue
+            title = (
+                window.title or ""
+            ).strip().lower()
 
+            if "google chrome" in title:
+                windows.append(window)
+
+        except Exception:
+            continue
+
+    return windows
+
+
+def _find_new_chrome_window(
+    before_ids,
+):
+    for window in _chrome_windows():
+        try:
             if window._hWnd in before_ids:
                 continue
 
-            if "google chrome" in window.title.lower():
+            return window
+
+        except Exception:
+            continue
+
+    return None
+
+
+def _find_profile_window(
+    profile_name,
+):
+    """
+    Best-effort identification of the requested
+    Chrome profile using the window title.
+
+    Chrome normally exposes the profile name in
+    some profile/window configurations.
+    """
+
+    profile_name = profile_name.lower()
+
+    for window in _chrome_windows():
+        try:
+            title = (
+                window.title or ""
+            ).lower()
+
+            if profile_name in title:
                 return window
 
         except Exception:
@@ -159,7 +203,9 @@ def open_application(name: str) -> str:
         "chrome",
         "google chrome",
     }:
-        chrome = _find_executable("chrome")
+        chrome = _find_executable(
+            "chrome"
+        )
 
         if chrome is None:
             return (
@@ -173,6 +219,7 @@ def open_application(name: str) -> str:
             subprocess.Popen(
                 [
                     chrome,
+                    "--new-window",
                     f"--profile-directory={CHROME_PROFILE}",
                 ],
                 shell=False,
@@ -183,17 +230,27 @@ def open_application(name: str) -> str:
             for _ in range(40):
                 time.sleep(0.25)
 
-                target = _find_new_chrome_window(
-                    before_ids
+                target = (
+                    _find_new_chrome_window(
+                        before_ids
+                    )
                 )
 
                 if target is not None:
                     break
 
             if target is None:
+                target = (
+                    _find_profile_window(
+                        "Vedant"
+                    )
+                )
+
+            if target is None:
                 return (
                     "Chrome opened, but its "
-                    "window could not be tracked"
+                    "Vedant window could not "
+                    "be identified"
                 )
 
             remember_window(
@@ -202,7 +259,11 @@ def open_application(name: str) -> str:
             )
 
             try:
+                if target.isMinimized:
+                    target.restore()
+
                 target.activate()
+
             except Exception:
                 pass
 
@@ -216,7 +277,9 @@ def open_application(name: str) -> str:
                 f"Could not open Chrome: {exc}"
             )
 
-    executable = _find_executable(name)
+    executable = _find_executable(
+        name
+    )
 
     if executable is None:
         return (
@@ -263,7 +326,9 @@ def close_application(name: str) -> str:
         key,
     )
 
-    if not process_name.endswith(".exe"):
+    if not process_name.endswith(
+        ".exe"
+    ):
         process_name += ".exe"
 
     closed = False
@@ -347,13 +412,17 @@ def volume_down() -> str:
 
 
 def mute() -> str:
-    pyautogui.press("volumemute")
+    pyautogui.press(
+        "volumemute"
+    )
 
     return "Volume muted"
 
 
 def unmute() -> str:
-    pyautogui.press("volumemute")
+    pyautogui.press(
+        "volumemute"
+    )
 
     return "Volume unmuted"
 
@@ -371,4 +440,6 @@ def lock_pc() -> str:
         return "PC locked"
 
     except Exception as exc:
-        return f"Could not lock PC: {exc}"
+        return (
+            f"Could not lock PC: {exc}"
+        )

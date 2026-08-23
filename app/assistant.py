@@ -1,5 +1,6 @@
 import re
 import time
+from datetime import datetime
 
 import soundfile as sf
 
@@ -21,6 +22,15 @@ from app.tools.system import (
     mute,
     unmute,
     lock_pc,
+)
+
+from app.tools.browser import (
+    youtube_search,
+    open_url,
+    open_google,
+    open_youtube,
+    open_github,
+    open_gmail,
 )
 
 from app.tools.desktop import (
@@ -105,6 +115,36 @@ class Jarvis:
         self.registry.register(
             "maximize_window",
             maximize_window,
+        )
+
+        self.registry.register(
+            "open_url",
+            open_url,
+        )
+
+        self.registry.register(
+            "open_google",
+            open_google,
+        )
+
+        self.registry.register(
+            "open_youtube",
+            open_youtube,
+        )
+
+        self.registry.register(
+            "open_github",
+            open_github,
+        )
+
+        self.registry.register(
+            "open_gmail",
+            open_gmail,
+        )
+
+        self.registry.register(
+            "youtube_search",
+            youtube_search,
         )
 
         self.registry.register(
@@ -221,6 +261,21 @@ class Jarvis:
         self.context = []
 
         self.max_recovery_attempts = 2
+
+    def get_time_greeting(self):
+
+        hour = datetime.now().hour
+
+        if 5 <= hour < 12:
+            return "Good morning, Sir."
+
+        if 12 <= hour < 17:
+            return "Good afternoon, Sir."
+
+        if 17 <= hour < 21:
+            return "Good evening, Sir."
+
+        return "Good night, Sir."
 
     def normalize_text(self, text):
 
@@ -340,9 +395,20 @@ class Jarvis:
 
     def wait_for_activation(self):
 
+        greeting = self.get_time_greeting()
+
+        startup_message = (
+            f"{greeting} "
+            "Jarvis is online and ready. "
+            "Say Hey Jarvis."
+        )
+
         print(
-            "\nJARVIS is idle. "
-            "Say 'Hey Jarvis'..."
+            f"\n{startup_message}"
+        )
+
+        self.tts.speak(
+            startup_message
         )
 
         while self.running:
@@ -380,7 +446,7 @@ class Jarvis:
             )
 
             self.tts.speak(
-                "Yes?"
+                "Yes, Sir. How can I help?"
             )
 
             return True
@@ -634,10 +700,14 @@ class Jarvis:
             {
                 "role": "system",
                 "content": (
-                    "Use the currently visible "
-                    "browser through UI automation. "
-                    "Do not launch another browser "
-                    "for navigation or search."
+                    "Use the existing Chrome "
+                    "window for browser tasks. "
+                    "For YouTube searches, use "
+                    "the youtube_search tool. "
+                    "For opening Google, use "
+                    "open_google. "
+                    "For opening YouTube, use "
+                    "open_youtube."
                 ),
             }
         )
@@ -792,7 +862,7 @@ class Jarvis:
     ):
 
         if not results:
-            return "Done."
+            return "All set, Sir."
 
         if len(results) == 1:
 
@@ -800,42 +870,213 @@ class Jarvis:
                 results[0]
             )
 
-            prefixes = (
-                "Opened and focused ",
-                "Opened ",
-                "Closed application: ",
-                "Focused window: ",
-                "Minimized window: ",
-                "Maximized window: ",
-                "Typed: ",
-                "Pressed: ",
-                "Clicked at ",
-                "Double-clicked at ",
-                "Moved mouse to ",
-                "Scrolled ",
-                "Found ",
-                "Clicked ",
-                "Typed ",
-                "I'll remember",
-                "is ",
-                "I forgot ",
-                "Volume increased",
-                "Volume decreased",
-                "Volume muted",
-                "Volume unmuted",
-                "PC locked",
-            )
+            if (
+                "Opened Google"
+                in result
+            ):
+                return "Google is open, Sir."
 
-            for prefix in prefixes:
+            if (
+                "Opened YouTube"
+                in result
+            ):
+                return "YouTube is open, Sir."
 
-                if result.startswith(
-                    prefix
-                ):
-                    return result
+            if (
+                result.startswith(
+                    "Opened and focused "
+                )
+            ):
+                return (
+                    "It's open and ready, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "Opened application:"
+                )
+            ):
+                return "It's open, Sir."
+
+            if (
+                result.startswith(
+                    "Closed application:"
+                )
+            ):
+                return "Closed, Sir."
+
+            if (
+                result.startswith(
+                    "Focused window:"
+                )
+            ):
+                return (
+                    "Switched over, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "Minimized window:"
+                )
+            ):
+                return "Minimized, Sir."
+
+            if (
+                result.startswith(
+                    "Maximized window:"
+                )
+            ):
+                return "Maximized, Sir."
+
+            if (
+                result.startswith(
+                    "Screenshot saved to"
+                )
+            ):
+                return (
+                    "Screenshot captured "
+                    "and saved, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "Volume increased"
+                )
+            ):
+                return (
+                    "Volume increased, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "Volume decreased"
+                )
+            ):
+                return (
+                    "Volume decreased, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "Volume muted"
+                )
+            ):
+                return (
+                    "Volume muted, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "Volume unmuted"
+                )
+            ):
+                return (
+                    "Volume unmuted, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "PC locked"
+                )
+            ):
+                return (
+                    "Your PC is locked, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "YouTube search opened"
+                )
+            ):
+                return (
+                    "YouTube search is "
+                    "ready, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "I'll remember"
+                )
+            ):
+                return (
+                    "I'll remember that, Sir."
+                )
+
+            if (
+                result.startswith(
+                    "I forgot"
+                )
+            ):
+                return "Forgotten, Sir."
+
+            if result.startswith(
+                "Found"
+            ):
+                return "Found it, Sir."
+
+            if result.startswith(
+                "Clicked"
+            ):
+                return "Clicked, Sir."
+
+            if result.startswith(
+                "Double-clicked"
+            ):
+                return "Done, Sir."
+
+            if result.startswith(
+                "Moved mouse"
+            ):
+                return "Moved, Sir."
+
+            if result.startswith(
+                "Scrolled"
+            ):
+                return "Scrolled, Sir."
+
+            if result.startswith(
+                "Typed"
+            ):
+                return "Done, Sir."
+
+            if result.startswith(
+                "Pressed"
+            ):
+                return "Done, Sir."
 
             return result
 
-        return "Done."
+        joined = "\n".join(
+            str(result)
+            for result in results
+        )
+
+        if any(
+            "Screenshot saved to"
+            in str(result)
+            for result in results
+        ):
+            return (
+                "Screenshot captured "
+                "and saved, Sir."
+            )
+
+        if (
+            "YouTube search opened"
+            in joined
+        ):
+            return (
+                "YouTube search is "
+                "ready, Sir."
+            )
+
+        if (
+            "Pressed: enter"
+            in joined
+        ):
+            return "There you go, Sir."
+
+        return "All set, Sir."
 
     def clean_for_speech(
         self,
@@ -987,6 +1228,7 @@ class Jarvis:
                     )
 
                     if sentence:
+
                         self.tts.speak_sentence(
                             sentence
                         )
@@ -1000,6 +1242,7 @@ class Jarvis:
             )
 
             if sentence:
+
                 self.tts.speak_sentence(
                     sentence
                 )
@@ -1009,7 +1252,7 @@ class Jarvis:
     def shutdown(self):
 
         message = (
-            "Bye-bye, sir. "
+            "Bye-bye, Sir. "
             "Shutting down Jarvis."
         )
 
@@ -1106,15 +1349,19 @@ class Jarvis:
                 if not self.authenticate_audio(
                     audio
                 ):
+
                     print(
                         "Command rejected."
                     )
+
                     continue
 
                 if self.is_shutdown_command(
                     text
                 ):
+
                     self.shutdown()
+
                     break
 
                 self.handle_command(

@@ -25,7 +25,10 @@ def remember_window(name: str, window) -> str:
         name.strip().lower(),
     )
 
-    _TARGET_WINDOWS[key] = window
+    _TARGET_WINDOWS[key] = {
+        "handle": window._hWnd,
+        "title": window.title,
+    }
 
     return f"Remembered window: {window.title}"
 
@@ -49,32 +52,33 @@ def _windows():
     ]
 
 
+def _window_from_handle(handle):
+    for window in _windows():
+        try:
+            if window._hWnd == handle:
+                return window
+        except Exception:
+            continue
+
+    return None
+
+
 def _find_specific_window(name: str):
     query = name.strip().lower()
 
     windows = _windows()
 
-    exact = []
-
     for window in windows:
         title = window.title.lower()
 
         if query == title:
-            exact.append(window)
-
-    if exact:
-        return exact[0]
-
-    matches = []
+            return window
 
     for window in windows:
         title = window.title.lower()
 
         if query in title:
-            matches.append(window)
-
-    if matches:
-        return matches[0]
+            return window
 
     return None
 
@@ -83,6 +87,18 @@ def _find_window(name: str):
     key = name.strip().lower()
     app = ALIASES.get(key, key)
 
+    remembered = _TARGET_WINDOWS.get(app)
+
+    if remembered:
+        handle = remembered.get("handle")
+
+        window = _window_from_handle(handle)
+
+        if _valid_window(window):
+            return window
+
+        _TARGET_WINDOWS.pop(app, None)
+
     if app not in {
         "chrome",
         "brave",
@@ -90,11 +106,6 @@ def _find_window(name: str):
         "edge",
     }:
         return _find_specific_window(name)
-
-    remembered = _TARGET_WINDOWS.get(app)
-
-    if _valid_window(remembered):
-        return remembered
 
     windows = _windows()
 
@@ -106,11 +117,7 @@ def _find_window(name: str):
             in window.title.lower()
         ]
 
-        return (
-            matches[0]
-            if matches
-            else None
-        )
+        return matches[0] if matches else None
 
     if app == "brave":
         matches = [
@@ -120,11 +127,7 @@ def _find_window(name: str):
             in window.title.lower()
         ]
 
-        return (
-            matches[0]
-            if matches
-            else None
-        )
+        return matches[0] if matches else None
 
     if app == "vs code":
         matches = [
@@ -138,11 +141,7 @@ def _find_window(name: str):
             )
         ]
 
-        return (
-            matches[0]
-            if matches
-            else None
-        )
+        return matches[0] if matches else None
 
     if app == "edge":
         matches = [
@@ -152,11 +151,7 @@ def _find_window(name: str):
             in window.title.lower()
         ]
 
-        return (
-            matches[0]
-            if matches
-            else None
-        )
+        return matches[0] if matches else None
 
     return None
 
