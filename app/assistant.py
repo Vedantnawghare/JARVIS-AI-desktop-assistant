@@ -9,6 +9,7 @@ from app.voice.stt import transcribe
 from app.voice.speaker import SpeakerVerifier
 
 from app.brain.agent import decide, recover
+from app.brain.llm import stream
 
 from app.tools.registry import ToolRegistry
 
@@ -65,6 +66,11 @@ from app.tools.files import (
     copy_file_or_folder,
     move_file_or_folder,
     delete_file_or_folder,
+)
+
+from app.tools.power import (
+    close_all_applications,
+    shutdown_pc,
 )
 
 
@@ -252,6 +258,16 @@ class Jarvis:
             delete_file_or_folder,
         )
 
+        self.registry.register(
+            "close_all_applications",
+            close_all_applications,
+        )
+
+        self.registry.register(
+            "shutdown_pc",
+            shutdown_pc,
+        )
+
         print("Loading Kokoro...")
 
         self.tts = KokoroTTS(
@@ -265,7 +281,10 @@ class Jarvis:
         self.active = False
         self.context = []
 
+        self.pending_confirmation = None
+
         self.max_recovery_attempts = 2
+
 
     def normalize_text(self, text):
 
@@ -284,6 +303,7 @@ class Jarvis:
         )
 
         return text
+
 
     def normalize_wake_text(self, text):
 
@@ -307,9 +327,12 @@ class Jarvis:
             for word in text.split()
         )
 
+
     def contains_wake_word(self, text):
 
-        normalized = self.normalize_wake_text(text)
+        normalized = self.normalize_wake_text(
+            text
+        )
 
         if "jarvis" in normalized:
             return True
@@ -322,28 +345,374 @@ class Jarvis:
 
         return "jarvis" in compact
 
-    def is_shutdown_command(self, text):
 
-        normalized = self.normalize_text(text)
+    def conversational_response(self, text):
 
-        return (
-            normalized in {
-                "shutdown",
-                "shut down",
-                "exit",
-                "quit",
-                "jarvis shutdown",
-                "jarvis shut down",
-                "jarvis exit",
-                "jarvis quit",
-            }
-            or normalized.startswith(
-                "jarvis shutdown"
-            )
-            or normalized.startswith(
-                "jarvis shut down"
-            )
+        normalized = self.normalize_text(
+            text
         )
+
+        if normalized in {
+            "hi",
+            "hello",
+            "hey",
+            "hello jarvis",
+            "hi jarvis",
+            "hey jarvis",
+        }:
+            return (
+                "Hello, Sir. It's good to hear from you. "
+                "What can I do for you?"
+            )
+
+        if normalized in {
+            "good morning",
+            "good morning jarvis",
+        }:
+            return (
+                "Good morning, Sir. "
+                "I hope you're doing well. "
+                "What are we working on today?"
+            )
+
+        if normalized in {
+            "good afternoon",
+            "good afternoon jarvis",
+        }:
+            return (
+                "Good afternoon, Sir. "
+                "I'm here and ready whenever you are."
+            )
+
+        if normalized in {
+            "good evening",
+            "good evening jarvis",
+        }:
+            return (
+                "Good evening, Sir. "
+                "What can I help you with?"
+            )
+
+        if normalized in {
+            "welcome",
+            "welcome jarvis",
+        }:
+            return (
+                "Thank you, Sir. "
+                "I'm right here and ready to help."
+            )
+
+        if normalized in {
+            "how are you",
+            "how are you jarvis",
+            "how are things",
+        }:
+            return (
+                "I'm doing well, Sir. "
+                "Everything is up and running. "
+                "What would you like to do?"
+            )
+
+        if normalized in {
+            "thank you",
+            "thanks",
+            "thanks jarvis",
+        }:
+            return (
+                "You're welcome, Sir. "
+                "Anytime."
+            )
+
+        if normalized in {
+            "good job",
+            "well done",
+            "nice job",
+        }:
+            return (
+                "Thank you, Sir. "
+                "Glad I could help."
+            )
+
+        return None
+
+    def is_shutdown_command(
+        self,
+        text,
+    ):
+
+        normalized = self.normalize_text(
+            text
+        )
+
+        return normalized in {
+            "shutdown jarvis",
+            "shut down jarvis",
+            "exit jarvis",
+            "quit jarvis",
+            "stop jarvis",
+            "stop yourself",
+            "go to sleep",
+            "go offline",
+        }
+
+    def is_yes_response(self, text):
+
+        normalized = self.normalize_text(
+            text
+        )
+
+        if normalized in {
+            "yes",
+            "yeah",
+            "yep",
+            "yup",
+            "sure",
+            "okay",
+            "ok",
+            "do it",
+            "go ahead",
+            "proceed",
+            "confirm",
+        }:
+            return True
+
+        if normalized.startswith("yes "):
+            return True
+
+        if normalized.startswith("yeah "):
+            return True
+
+        if normalized.startswith("yep "):
+            return True
+
+        if normalized.startswith("sure "):
+            return True
+
+        return False
+
+
+    def is_no_response(self, text):
+
+        normalized = self.normalize_text(
+            text
+        )
+
+        if normalized in {
+            "no",
+            "nope",
+            "nah",
+            "cancel",
+            "cancel it",
+            "dont",
+            "do not",
+            "stop",
+            "never mind",
+            "never",
+        }:
+            return True
+
+        if normalized.startswith("no "):
+            return True
+
+        if normalized.startswith("no,"):
+            return True
+
+        if normalized.startswith("nope "):
+            return True
+
+        if normalized.startswith("dont "):
+            return True
+
+        return False
+
+
+    def is_close_all_command(self, text):
+
+        normalized = self.normalize_text(
+            text
+        )
+
+        return normalized in {
+            "close everything",
+            "close everything down",
+            "close all",
+            "close all applications",
+            "close all apps",
+            "close all windows",
+            "close every application",
+            "close every app",
+        }
+
+
+    def is_shutdown_laptop_command(self, text):
+
+        normalized = self.normalize_text(
+            text
+        )
+
+        return normalized in {
+            "shutdown",
+            "shut down",
+            "shutdown laptop",
+            "shut down laptop",
+            "shutdown my laptop",
+            "shut down my laptop",
+            "shutdown computer",
+            "shut down computer",
+            "shutdown my computer",
+            "shut down my computer",
+            "turn off laptop",
+            "turn off my laptop",
+            "turn off computer",
+            "turn off my computer",
+        }
+
+
+    def is_close_and_shutdown_command(self, text):
+
+        normalized = self.normalize_text(
+            text
+        )
+
+        close_words = (
+            "close everything",
+            "close all",
+            "close all applications",
+            "close all apps",
+            "close all windows",
+        )
+
+        shutdown_words = (
+            "shutdown",
+            "shut down",
+            "shutdown laptop",
+            "shut down laptop",
+            "shutdown my laptop",
+            "shut down my laptop",
+            "shutdown computer",
+            "shut down computer",
+            "shutdown my computer",
+            "shut down my computer",
+            "turn off laptop",
+            "turn off my laptop",
+            "turn off computer",
+            "turn off my computer",
+        )
+
+        has_close = any(
+            word in normalized
+            for word in close_words
+        )
+
+        has_shutdown = any(
+            word in normalized
+            for word in shutdown_words
+        )
+
+        return has_close and has_shutdown
+
+
+    def ask_shutdown_confirmation(
+        self,
+        close_everything=True,
+    ):
+
+        if close_everything:
+
+            message = (
+                "Should I close all open "
+                "applications and shut down "
+                "the laptop, Sir?"
+            )
+
+        else:
+
+            message = (
+                "Should I shut down the "
+                "laptop, Sir?"
+            )
+
+        self.pending_confirmation = {
+            "close_everything": close_everything,
+        }
+
+        print(
+            f"\nJARVIS: {message}"
+        )
+
+        self.tts.speak(
+            message
+        )
+
+
+    def cancel_pending_confirmation(self):
+
+        self.pending_confirmation = None
+
+        message = (
+            "Understood, Sir. "
+            "I won't do anything."
+        )
+
+        print(
+            f"\nJARVIS: {message}"
+        )
+
+        self.tts.speak(
+            message
+        )
+
+
+    def execute_pending_confirmation(self):
+
+        pending = self.pending_confirmation
+
+        if pending is None:
+            return False
+
+        close_everything = pending.get(
+            "close_everything",
+            False,
+        )
+
+        self.pending_confirmation = None
+
+        if close_everything:
+
+            print(
+                "\nClosing applications..."
+            )
+
+            result = (
+                close_all_applications()
+            )
+
+            print(
+                f"Result: {result}"
+            )
+
+            time.sleep(1)
+
+        message = (
+            "Understood, Sir. "
+            "Shutting down the laptop."
+        )
+
+        print(
+            f"\nJARVIS: {message}"
+        )
+
+        self.tts.speak(
+            message
+        )
+
+        shutdown_pc()
+
+        self.running = False
+        self.active = False
+
+        return True
+
 
     def record_audio(self, path):
 
@@ -357,9 +726,12 @@ class Jarvis:
 
         return audio
 
+
     def authenticate_audio(self, audio):
 
-        print("Authenticating speaker...")
+        print(
+            "Authenticating speaker..."
+        )
 
         sf.write(
             COMMAND_AUDIO,
@@ -373,15 +745,19 @@ class Jarvis:
         )
 
         if authorized:
+
             print(
                 "Speaker authenticated."
             )
+
         else:
+
             print(
                 "Speaker rejected."
             )
 
         return authorized
+
 
     def wait_for_activation(self):
 
@@ -424,13 +800,24 @@ class Jarvis:
                 "\nJARVIS ACTIVE"
             )
 
+            greeting = (
+                "Hello, Sir. "
+                "I'm listening. "
+                "What can I do for you?"
+            )
+
+            print(
+                f"\nJARVIS: {greeting}"
+            )
+
             self.tts.speak(
-                "Yes?"
+                greeting
             )
 
             return True
 
         return False
+
 
     def listen_for_authenticated_command(
         self
@@ -449,251 +836,93 @@ class Jarvis:
         )
 
         return audio, text
-
-    def needs_reauthentication(
-        self,
-        decision,
-    ):
-
-        high_risk_tools = {
-            "delete_file",
-            "delete_path",
-            "send_message",
-            "send_email",
-            "run_command",
-            "shutdown_computer",
-            "restart_computer",
-            "lock_pc",
-        }
-
-        if (
-            decision.get("action")
-            != "plan"
-        ):
-            return False
-
-        return any(
-            step.get("tool")
-            in high_risk_tools
-            for step in decision.get(
-                "steps",
-                [],
-            )
-        )
-
-    def execute_step(
-        self,
-        tool_name,
-        arguments,
-    ):
-
-        print(
-            f"Executing: {tool_name}"
-        )
-
-        return self.registry.execute(
-            tool_name,
-            **arguments,
-        )
-
-    def execute_plan(
-        self,
-        steps,
-        user_text,
-    ):
-
-        results = []
-
-        recovery_count = 0
-
-        current_steps = steps
-
-        while True:
-
-            failed = False
-
-            for index, step in enumerate(
-                current_steps,
-                start=1,
-            ):
-
-                tool_name = step["tool"]
-
-                arguments = step.get(
-                    "arguments",
-                    {},
-                )
-
-                print(
-                    f"Step {index}: "
-                    f"{tool_name}"
-                )
-
-                try:
-
-                    tool_start = (
-                        time.perf_counter()
-                    )
-
-                    result = (
-                        self.execute_step(
-                            tool_name,
-                            arguments,
-                        )
-                    )
-
-                    elapsed = (
-                        time.perf_counter()
-                        - tool_start
-                    )
-
-                    print(
-                        "Tool execution time: "
-                        f"{elapsed:.2f}s"
-                    )
-
-                    print(
-                        f"Result: {result}"
-                    )
-
-                    results.append(
-                        f"{tool_name}: "
-                        f"{result}"
-                    )
-
-                    if (
-                        tool_name
-                        == "press_key"
-                        and str(
-                            arguments.get(
-                                "key",
-                                "",
-                            )
-                        ).lower()
-                        == "enter"
-                    ):
-
-                        time.sleep(
-                            1.5
-                        )
-
-                except Exception as exc:
-
-                    failed = True
-
-                    print(
-                        f"Tool failed: "
-                        f"{tool_name}"
-                    )
-
-                    print(
-                        f"Error: {exc}"
-                    )
-
-                    if (
-                        recovery_count
-                        >= self.max_recovery_attempts
-                    ):
-
-                        return {
-                            "success": False,
-                            "results": results,
-                            "error": str(exc),
-                        }
-
-                    recovery_count += 1
-
-                    recovery_plan = recover(
-                        user_text,
-                        tool_name,
-                        str(exc),
-                    )
-
-                    print(
-                        "Recovery plan:",
-                        recovery_plan,
-                    )
-
-                    if (
-                        recovery_plan.get(
-                            "action"
-                        )
-                        == "respond"
-                    ):
-
-                        return {
-                            "success": False,
-                            "results": results,
-                            "error": (
-                                recovery_plan.get(
-                                    "response",
-                                    "Recovery failed.",
-                                )
-                            ),
-                        }
-
-                    current_steps = (
-                        recovery_plan.get(
-                            "steps",
-                            [],
-                        )
-                    )
-
-                    break
-
-            if not failed:
-
-                return {
-                    "success": True,
-                    "results": results,
-                    "error": None,
-                }
-
-    def add_context(
-        self,
-        role,
-        content,
-    ):
-
-        self.context.append(
-            {
-                "role": role,
-                "content": content,
-            }
-        )
-
-        self.context = self.context[-8:]
-
     def process_command(
         self,
         text,
     ):
 
-        start = time.perf_counter()
-
-        context_for_agent = (
-            self.context.copy()
+        conversational = (
+            self.conversational_response(
+                text
+            )
         )
 
-        context_for_agent.append(
-            {
-                "role": "system",
+        if conversational:
+
+            return {
+                "type": "response",
+                "content": conversational,
+            }
+
+
+        normalized = self.normalize_text(
+            text
+        )
+
+        if normalized in {
+            "bye",
+            "goodbye",
+            "bye jarvis",
+            "goodbye jarvis",
+            "go to sleep",
+            "sleep jarvis",
+        }:
+
+            return {
+                "type": "response",
                 "content": (
-                    "Use the currently visible "
-                    "browser through UI automation. "
-                    "Do not launch another browser "
-                    "for navigation or search."
+                    "Alright, Sir. "
+                    "I'll be here when you need me."
                 ),
             }
-        )
+
+
+        if self.is_shutdown_command(
+            text
+        ):
+
+            self.active = False
+
+            return {
+                "type": "response",
+                "content": (
+                    "Alright, Sir. "
+                    "I'll go offline now. "
+                    "Call me whenever you need me."
+                ),
+            }
+
 
         print(
             "\nAgent thinking..."
         )
 
-        decision = decide(
-            text,
-            context_for_agent,
+        started = time.time()
+
+        try:
+
+            decision = decide(
+                text,
+                context=self.context,
+            )
+
+        except Exception as exc:
+
+            print(
+                f"Agent error: {exc}"
+            )
+
+            return {
+                "type": "response",
+                "content": (
+                    "I ran into a problem "
+                    "understanding that command, Sir."
+                ),
+            }
+
+        elapsed = (
+            time.time()
+            - started
         )
 
         print(
@@ -701,100 +930,35 @@ class Jarvis:
         )
 
         print(
-            "Agent decision time: "
-            f"{time.perf_counter() - start:.2f}s"
+            f"Agent decision time: "
+            f"{elapsed:.2f}s"
         )
 
-        self.add_context(
-            "user",
-            text,
+
+        action = decision.get(
+            "action"
         )
 
-        if (
-            decision.get("action")
-            == "respond"
-        ):
+
+        if action == "respond":
 
             response = decision.get(
                 "response",
-                "",
+                "Alright, Sir.",
             )
 
-            self.add_context(
-                "assistant",
-                response,
+            self.context.append(
+                {
+                    "role": "user",
+                    "content": text,
+                }
             )
 
-            return {
-                "type": "response",
-                "content": response,
-            }
-
-        if (
-            decision.get("action")
-            != "plan"
-        ):
-
-            response = (
-                "I could not understand "
-                "what action to take."
-            )
-
-            self.add_context(
-                "assistant",
-                response,
-            )
-
-            return {
-                "type": "response",
-                "content": response,
-            }
-
-        if self.needs_reauthentication(
-            decision
-        ):
-
-            print(
-                "High-risk action detected."
-            )
-
-            audio = self.record_audio(
-                COMMAND_AUDIO
-            )
-
-            if not self.authenticate_audio(
-                audio
-            ):
-
-                response = (
-                    "Speaker verification "
-                    "failed."
-                )
-
-                self.add_context(
-                    "assistant",
-                    response,
-                )
-
-                return {
-                    "type": "response",
+            self.context.append(
+                {
+                    "role": "assistant",
                     "content": response,
                 }
-
-        execution = self.execute_plan(
-            decision["steps"],
-            text,
-        )
-
-        if not execution["success"]:
-
-            response = execution[
-                "error"
-            ]
-
-            self.add_context(
-                "assistant",
-                response,
             )
 
             return {
@@ -802,171 +966,278 @@ class Jarvis:
                 "content": response,
             }
 
-        results = execution[
-            "results"
-        ]
 
-        results_text = "\n".join(
-            results
+        if action != "plan":
+
+            return {
+                "type": "response",
+                "content": (
+                    "I'm not sure how to "
+                    "handle that yet, Sir."
+                ),
+            }
+
+
+        steps = decision.get(
+            "steps",
+            [],
         )
 
-        self.add_context(
-            "assistant",
-            results_text,
-        )
+        if not steps:
 
-        response = (
-            self.direct_confirmation(
-                results
-            )
-        )
+            return {
+                "type": "response",
+                "content": (
+                    "I couldn't find an action "
+                    "to perform for that, Sir."
+                ),
+            }
 
-        self.add_context(
-            "assistant",
-            response,
+
+        execution = self.execute_plan(
+            text,
+            steps,
         )
 
         return {
             "type": "direct",
-            "content": response,
+            "content": execution,
         }
 
-    def direct_confirmation(
+
+    def execute_step(
         self,
-        results,
+        tool,
+        arguments,
     ):
 
+        print(
+            f"Executing: {tool}"
+        )
+
+        started = time.time()
+
+        result = self.registry.execute(
+            tool,
+            arguments,
+        )
+
+        elapsed = (
+            time.time()
+            - started
+        )
+
+        print(
+            f"Tool execution time: "
+            f"{elapsed:.2f}s"
+        )
+
+        print(
+            f"Result: {result}"
+        )
+
+        return result
+
+
+    def execute_plan(
+        self,
+        user_input,
+        steps,
+    ):
+
+        results = []
+
+        for index, step in enumerate(
+            steps,
+            start=1,
+        ):
+
+            tool = step.get(
+                "tool"
+            )
+
+            arguments = step.get(
+                "arguments",
+                {},
+            )
+
+            if not tool:
+
+                continue
+
+            print(
+                f"Step {index}: {tool}"
+            )
+
+            attempts = 0
+
+            while True:
+
+                try:
+
+                    result = self.execute_step(
+                        tool,
+                        arguments,
+                    )
+
+                    results.append(
+                        {
+                            "tool": tool,
+                            "result": result,
+                        }
+                    )
+
+                    break
+
+                except Exception as exc:
+
+                    attempts += 1
+
+                    print(
+                        f"Tool failed: {tool}"
+                    )
+
+                    print(
+                        f"Error: {exc}"
+                    )
+
+                    if (
+                        attempts
+                        > self.max_recovery_attempts
+                    ):
+
+                        results.append(
+                            {
+                                "tool": tool,
+                                "result": (
+                                    f"Failed: {exc}"
+                                ),
+                            }
+                        )
+
+                        break
+
+
+                    try:
+
+                        recovery_plan = recover(
+                            user_input,
+                            tool,
+                            str(exc),
+                        )
+
+                    except Exception as recovery_exc:
+
+                        print(
+                            "Recovery failed:"
+                            f" {recovery_exc}"
+                        )
+
+                        results.append(
+                            {
+                                "tool": tool,
+                                "result": (
+                                    f"Failed: {exc}"
+                                ),
+                            }
+                        )
+
+                        break
+
+
+                    print(
+                        f"Recovery plan: "
+                        f"{recovery_plan}"
+                    )
+
+                    recovery_steps = (
+                        recovery_plan.get(
+                            "steps",
+                            [],
+                        )
+                    )
+
+                    if not recovery_steps:
+
+                        results.append(
+                            {
+                                "tool": tool,
+                                "result": (
+                                    f"Failed: {exc}"
+                                ),
+                            }
+                        )
+
+                        break
+
+                    tool = recovery_steps[
+                        0
+                    ].get(
+                        "tool"
+                    )
+
+                    arguments = (
+                        recovery_steps[
+                            0
+                        ].get(
+                            "arguments",
+                            {},
+                        )
+                    )
+
+
         if not results:
-            return "Done."
 
-        if len(results) == 1:
-
-            result = str(
-                results[0]
+            return (
+                "I couldn't complete that "
+                "command, Sir."
             )
 
-            prefixes = (
-                "Opened and focused ",
-                "Opened ",
-                "Closed application: ",
-                "Focused window: ",
-                "Minimized window: ",
-                "Maximized window: ",
-                "Typed: ",
-                "Pressed: ",
-                "Clicked at ",
-                "Double-clicked at ",
-                "Moved mouse to ",
-                "Scrolled ",
-                "Found ",
-                "Clicked ",
-                "Typed ",
-                "I'll remember",
-                "is ",
-                "I forgot ",
-                "Volume increased",
-                "Volume decreased",
-                "Volume muted",
-                "Volume unmuted",
-                "PC locked",
-                "Created folder:",
-                "Created file:",
-                "Copied ",
-                "Moved ",
-                "Deleted:",
-                "Opened This PC",
+
+        successful = []
+
+        for item in results:
+
+            result = item.get(
+                "result"
             )
 
-            for prefix in prefixes:
+            if result is not None:
 
-                if result.startswith(
-                    prefix
-                ):
-                    return result
+                successful.append(
+                    str(result)
+                )
 
-            return result
 
-        return "Done."
+        if len(successful) == 1:
+
+            return successful[0]
+
+
+        return "\n".join(
+            successful
+        )
+
 
     def clean_for_speech(
         self,
         text,
     ):
 
-        text = re.sub(
-            r"<think>.*?</think>",
-            " ",
-            text,
-            flags=re.DOTALL,
-        )
+        if not text:
+            return ""
+
+        text = str(text)
 
         text = re.sub(
-            r"```.*?```",
-            " ",
-            text,
-            flags=re.DOTALL,
-        )
-
-        text = re.sub(
-            r"`([^`]*)`",
-            r"\1",
-            text,
-        )
-
-        text = re.sub(
-            r"\*\*(.*?)\*\*",
-            r"\1",
-            text,
-        )
-
-        text = re.sub(
-            r"\*(.*?)\*",
-            r"\1",
-            text,
-        )
-
-        text = re.sub(
-            r"__(.*?)__",
-            r"\1",
-            text,
-        )
-
-        text = re.sub(
-            r"_(.*?)_",
-            r"\1",
-            text,
-        )
-
-        text = re.sub(
-            r"^#{1,6}\s*",
+            r"https?://\S+",
             "",
             text,
-            flags=re.MULTILINE,
         )
 
         text = re.sub(
-            r"^\s*[-*+]\s+",
+            r"[*_`#]+",
             "",
-            text,
-            flags=re.MULTILINE,
-        )
-
-        text = re.sub(
-            r"^\s*\d+\.\s+",
-            "",
-            text,
-            flags=re.MULTILINE,
-        )
-
-        text = re.sub(
-            r"\[(.*?)\]\(.*?\)",
-            r"\1",
-            text,
-        )
-
-        text = re.sub(
-            r"[→←↑↓]",
-            " ",
             text,
         )
 
@@ -976,27 +1247,15 @@ class Jarvis:
             text,
         )
 
-        text = text.replace(
-            "J.A.R.V.I.S.",
-            "Jarvis",
-        )
-
-        text = text.replace(
-            "J-A-R-V-I-S",
-            "Jarvis",
-        )
-
-        text = text.replace(
-            "JARVIS",
-            "Jarvis",
-        )
-
         return text.strip()
+
 
     def speak_stream(
         self,
-        prompt,
+        content,
     ):
+
+        collected = []
 
         print(
             "\nJARVIS: ",
@@ -1004,9 +1263,12 @@ class Jarvis:
             flush=True,
         )
 
-        buffer = ""
+        for chunk in stream(
+            content
+        ):
 
-        for chunk in stream(prompt):
+            if not chunk:
+                continue
 
             print(
                 chunk,
@@ -1014,71 +1276,118 @@ class Jarvis:
                 flush=True,
             )
 
-            buffer += chunk
-
-            sentences = re.split(
-                r"(?<=[.!?])\s+",
-                buffer,
+            collected.append(
+                chunk
             )
-
-            if len(sentences) > 1:
-
-                complete = (
-                    sentences[:-1]
-                )
-
-                buffer = sentences[-1]
-
-                for sentence in complete:
-
-                    sentence = (
-                        self.clean_for_speech(
-                            sentence
-                        )
-                    )
-
-                    if sentence:
-                        self.tts.speak_sentence(
-                            sentence
-                        )
-
-        if buffer.strip():
-
-            sentence = (
-                self.clean_for_speech(
-                    buffer
-                )
-            )
-
-            if sentence:
-                self.tts.speak_sentence(
-                    sentence
-                )
 
         print()
 
-    def shutdown(self):
-
-        message = (
-            "Bye-bye, sir. "
-            "Shutting down Jarvis."
+        response = "".join(
+            collected
         )
 
-        print(
-            f"\nJARVIS: {message}"
+        speech = (
+            self.clean_for_speech(
+                response
+            )
         )
 
-        self.tts.speak(
-            message
-        )
+        if speech:
 
-        self.running = False
-        self.active = False
+            self.tts.speak(
+                speech
+            )
 
+        return response
     def handle_command(
         self,
         text,
     ):
+
+        # --------------------------------------------------------
+        # PENDING CONFIRMATION
+        # --------------------------------------------------------
+
+        if self.pending_confirmation is not None:
+
+            if self.is_yes_response(text):
+
+                self.execute_pending_confirmation()
+
+                return
+
+            if self.is_no_response(text):
+
+                self.cancel_pending_confirmation()
+
+                return
+
+            message = (
+                "Please say yes to confirm "
+                "or no to cancel, Sir."
+            )
+
+            print(
+                f"\nJARVIS: {message}"
+            )
+
+            self.tts.speak(
+                message
+            )
+
+            return
+
+
+        # --------------------------------------------------------
+        # POWER COMMANDS
+        # --------------------------------------------------------
+
+        if self.is_close_and_shutdown_command(
+            text
+        ):
+
+            self.ask_shutdown_confirmation(
+                close_everything=True
+            )
+
+            return
+
+
+        if self.is_shutdown_laptop_command(
+            text
+        ):
+
+            self.ask_shutdown_confirmation(
+                close_everything=False
+            )
+
+            return
+
+
+        if self.is_close_all_command(
+            text
+        ):
+
+            result = (
+                close_all_applications()
+            )
+
+            print(
+                f"\nJARVIS: {result}"
+            )
+
+            self.tts.speak(
+                self.clean_for_speech(
+                    result
+                )
+            )
+
+            return
+
+
+        # --------------------------------------------------------
+        # NORMAL COMMAND
+        # --------------------------------------------------------
 
         result = self.process_command(
             text
@@ -1103,7 +1412,10 @@ class Jarvis:
                 )
             )
 
-        elif (
+            return
+
+
+        if (
             result["type"]
             == "direct"
         ):
@@ -1122,7 +1434,10 @@ class Jarvis:
                 response
             )
 
-        elif (
+            return
+
+
+        if (
             result["type"]
             == "stream"
         ):
@@ -1131,12 +1446,17 @@ class Jarvis:
                 result["content"]
             )
 
+            return
+
+
     def run(self):
 
         try:
 
             if not self.wait_for_activation():
+
                 return
+
 
             while (
                 self.running
@@ -1147,36 +1467,63 @@ class Jarvis:
                     self.listen_for_authenticated_command()
                 )
 
+
                 if not text.strip():
+
                     continue
+
 
                 print(
                     f"\nYou: {text}"
                 )
 
-                if not self.authenticate_audio(
-                    audio
-                ):
-                    print(
-                        "Command rejected."
-                    )
-                    continue
 
-                if self.is_shutdown_command(
-                    text
+                # ------------------------------------------------
+                # IMPORTANT:
+                #
+                # Once a command has already been authenticated
+                # and JARVIS is waiting for YES/NO confirmation,
+                # don't authenticate the tiny confirmation phrase
+                # again.
+                # ------------------------------------------------
+
+                if (
+                    self.pending_confirmation
+                    is None
                 ):
-                    self.shutdown()
-                    break
+
+                    if not self.authenticate_audio(
+                        audio
+                    ):
+
+                        print(
+                            "Command rejected."
+                        )
+
+                        continue
+
 
                 self.handle_command(
                     text
                 )
+
 
         except KeyboardInterrupt:
 
             print(
                 "\nStopping JARVIS..."
             )
+
+
+        except Exception as exc:
+
+            print(
+                "\nJARVIS encountered "
+                f"an unexpected error: {exc}"
+            )
+
+            raise
+
 
         finally:
 
