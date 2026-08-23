@@ -29,18 +29,19 @@ class BrowserManager:
 
         self._page = self._context.new_page()
 
-        print("🌐 Chrome browser started.")
+        self._page.goto(
+            "https://www.google.com",
+            wait_until="domcontentloaded",
+        )
+
+        print("Chrome browser started.")
 
     @property
     def page(self) -> Page:
         if self._page is None:
-            raise RuntimeError("Browser is not started.")
-
-        if self._page.is_closed():
-            if self._context is None:
-                raise RuntimeError("Browser context is unavailable.")
-
-            self._page = self._context.new_page()
+            raise RuntimeError(
+                "Browser is not started."
+            )
 
         return self._page
 

@@ -3,8 +3,7 @@ from app.assistant import Jarvis
 
 def main():
     jarvis = Jarvis()
-
-    jarvis.run_once()
+    jarvis.run()
 
 
 if __name__ == "__main__":

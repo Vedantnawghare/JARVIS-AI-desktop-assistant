@@ -1,3 +1,5 @@
+from urllib.parse import quote_plus
+
 from app.browser.manager import BrowserManager
 
 
@@ -21,7 +23,10 @@ class BrowserTools:
             wait_until="domcontentloaded",
         )
 
-        search_box = page.get_by_placeholder("Search")
+        search_box = page.get_by_placeholder(
+            "Search"
+        )
+
         search_box.fill(query)
 
         search_button = page.locator(
@@ -30,7 +35,9 @@ class BrowserTools:
 
         search_button.click()
 
-        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_load_state(
+            "domcontentloaded"
+        )
 
         return (
             f"YouTube search completed: {query} | "
@@ -38,8 +45,6 @@ class BrowserTools:
         )
 
     def web_search(self, query: str) -> str:
-        from urllib.parse import quote_plus
-
         page = self.browser.page
 
         search_url = (
@@ -47,40 +52,18 @@ class BrowserTools:
             + quote_plus(query)
         )
 
-        print(f"🌐 Searching: {query}")
-
-        try:
-            page.goto(
-                search_url,
-                wait_until="domcontentloaded",
-                timeout=15000,
-            )
-        except Exception as exc:
-            return f"Web search failed: {exc}"
-
-        page.wait_for_timeout(2000)
-
-        print(f"🌐 Page: {page.url}")
-
-        results = page.locator("li.b_algo")
-
-        collected = []
-
-        for i in range(min(results.count(), 5)):
-            result = results.nth(i)
-            text = result.inner_text().strip()
-
-            if text:
-                collected.append(text)
-
-        if not collected:
-            return (
-                f"No search results found for: {query}\n"
-                f"Page title: {page.title()}\n"
-                f"Page URL: {page.url}"
-            )
+        page.goto(
+            search_url,
+            wait_until="domcontentloaded",
+        )
 
         return (
-            f"Web search results for: {query}\n\n"
-            + "\n\n".join(collected)
+            f"Web search completed: {query} | "
+            f"Page: {page.url}"
+        )
+
+    def current_page(self) -> str:
+        return (
+            f"URL: {self.browser.page.url} | "
+            f"Title: {self.browser.page.title()}"
         )

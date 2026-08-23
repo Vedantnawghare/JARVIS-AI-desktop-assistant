@@ -1,6 +1,9 @@
 import os
 import subprocess
+import time
 from pathlib import Path
+
+import pygetwindow as gw
 
 
 COMMON_APPS = {
@@ -13,10 +16,33 @@ COMMON_APPS = {
 }
 
 
+def _focus_window(name: str) -> bool:
+    name = name.lower().strip()
+
+    for window in gw.getAllWindows():
+        title = (window.title or "").lower()
+
+        if name in title:
+            try:
+                if window.isMinimized:
+                    window.restore()
+
+                window.activate()
+                time.sleep(0.5)
+                return True
+            except Exception:
+                pass
+
+    return False
+
+
 def open_application(name: str) -> str:
     name = name.lower().strip()
 
-    executable = COMMON_APPS.get(name, name)
+    executable = COMMON_APPS.get(
+        name,
+        name,
+    )
 
     try:
         subprocess.Popen(
@@ -24,7 +50,13 @@ def open_application(name: str) -> str:
             shell=True,
         )
 
-        return f"Opened {name}"
+        for _ in range(20):
+            time.sleep(0.25)
+
+            if _focus_window(name):
+                return f"Opened and focused {name}"
+
+        return f"Opened {name}, but could not focus the window."
 
     except Exception as exc:
         return f"Could not open {name}: {exc}"

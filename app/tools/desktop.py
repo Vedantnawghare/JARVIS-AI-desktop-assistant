@@ -4,7 +4,7 @@ import pyautogui
 def type_text(text: str) -> str:
     pyautogui.write(
         text,
-        interval=0.01,
+        interval=0.03,
     )
 
     return f"Typed: {text}"

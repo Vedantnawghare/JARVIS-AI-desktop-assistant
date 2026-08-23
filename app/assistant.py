@@ -7,7 +7,7 @@ from app.voice.listener import LiveListener
 from app.voice.stt import transcribe
 from app.voice.speaker import SpeakerVerifier
 
-from app.brain.agent import decide
+from app.brain.agent import decide, recover
 from app.brain.llm import stream
 
 from app.browser.manager import BrowserManager
@@ -15,6 +15,19 @@ from app.browser.browser import BrowserTools
 from app.tools.registry import ToolRegistry
 from app.tools.system import open_application, open_path
 from app.tools.desktop import type_text, press_key, hotkey
+from app.tools.mouse import (
+    click,
+    double_click,
+    move_mouse,
+    scroll,
+)
+from app.tools.screen import screenshot
+from app.tools.window import focus_window
+from app.tools.memory import (
+    remember,
+    recall,
+    forget,
+)
 
 
 WAKE_AUDIO = "tests/audio/wake_word.wav"
@@ -39,21 +52,70 @@ class Jarvis:
             "open_application",
             open_application,
         )
+
         self.registry.register(
             "open_path",
             open_path,
         )
+
+        self.registry.register(
+            "focus_window",
+            focus_window,
+        )
+
         self.registry.register(
             "type_text",
             type_text,
         )
+
         self.registry.register(
             "press_key",
             press_key,
         )
+
         self.registry.register(
             "hotkey",
             hotkey,
+        )
+
+        self.registry.register(
+            "click",
+            click,
+        )
+
+        self.registry.register(
+            "double_click",
+            double_click,
+        )
+
+        self.registry.register(
+            "move_mouse",
+            move_mouse,
+        )
+
+        self.registry.register(
+            "scroll",
+            scroll,
+        )
+
+        self.registry.register(
+            "screenshot",
+            screenshot,
+        )
+
+        self.registry.register(
+            "remember",
+            remember,
+        )
+
+        self.registry.register(
+            "recall",
+            recall,
+        )
+
+        self.registry.register(
+            "forget",
+            forget,
         )
 
         print("Loading Kokoro...")
@@ -64,6 +126,10 @@ class Jarvis:
         print("Kokoro ready.")
 
         self.running = True
+        self.active = False
+        self.context = []
+
+        self.max_recovery_attempts = 2
 
     def start_browser(self):
         if self.browser is not None:
@@ -82,10 +148,12 @@ class Jarvis:
             "open_url",
             self.browser_tools.open_url,
         )
+
         self.registry.register(
             "search_youtube",
             self.browser_tools.search_youtube,
         )
+
         self.registry.register(
             "web_search",
             self.browser_tools.web_search,
@@ -93,23 +161,41 @@ class Jarvis:
 
         print("Browser tools ready.")
 
-    def normalize_wake_text(self, text):
+    def normalize_text(self, text):
         text = text.lower().strip()
-        text = re.sub(r"[\.\-_]+", "", text)
-        text = re.sub(r"\s+", " ", text)
+
+        text = re.sub(
+            r"[^\w\s]",
+            " ",
+            text,
+        )
+
+        text = re.sub(
+            r"\s+",
+            " ",
+            text,
+        )
+
+        return text
+
+    def normalize_wake_text(self, text):
+        text = self.normalize_text(text)
 
         replacements = {
             "hirvs": "jarvis",
             "hervs": "jarvis",
             "jervis": "jarvis",
             "jarv": "jarvis",
+            "jairvis": "jarvis",
+            "jairavish": "jarvis",
         }
 
-        words = text.split()
-
         return " ".join(
-            replacements.get(word, word)
-            for word in words
+            replacements.get(
+                word,
+                word,
+            )
+            for word in text.split()
         )
 
     def contains_wake_word(self, text):
@@ -126,43 +212,43 @@ class Jarvis:
 
         return "jarvis" in compact
 
-    def wait_for_wake_word(self):
-        print("\nJARVIS is waiting...")
+    def is_shutdown_command(self, text):
+        normalized = self.normalize_text(text)
 
-        while self.running:
-            audio = self.listener.listen()
+        shutdown_phrases = {
+            "shutdown",
+            "shut down",
+            "exit",
+            "quit",
+            "jarvis shutdown",
+            "jarvis shut down",
+            "jarvis exit",
+            "jarvis quit",
+        }
 
-            sf.write(
-                WAKE_AUDIO,
-                audio,
-                16000,
+        return (
+            normalized in shutdown_phrases
+            or normalized.startswith(
+                "jarvis shutdown"
             )
+            or normalized.startswith(
+                "jarvis shut down"
+            )
+        )
 
-            text = transcribe(WAKE_AUDIO)
-
-            print(f"Heard: {text}")
-
-            if self.contains_wake_word(text):
-                print("Wake word detected!")
-                return True
-
-        return False
-
-    def listen_for_command(self):
-        print("Listening for command...")
-
+    def record_audio(self, path):
         audio = self.listener.listen()
 
         sf.write(
-            COMMAND_AUDIO,
+            path,
             audio,
             16000,
         )
 
         return audio
 
-    def verify_speaker(self, audio):
-        print("Verifying speaker...")
+    def authenticate_audio(self, audio):
+        print("Authenticating speaker...")
 
         sf.write(
             COMMAND_AUDIO,
@@ -170,95 +256,273 @@ class Jarvis:
             16000,
         )
 
-        return self.speaker.verify(
+        authorized = self.speaker.verify(
             REFERENCE_AUDIO,
             COMMAND_AUDIO,
         )
 
-    def is_exit_command(self, text):
-        text = text.lower().strip()
+        if authorized:
+            print("Speaker authenticated.")
+        else:
+            print("Speaker rejected.")
 
-        text = re.sub(
-            r"[^\w\s]",
-            " ",
-            text,
-        )
-        text = re.sub(
-            r"\s+",
-            " ",
-            text,
+        return authorized
+
+    def wait_for_activation(self):
+        print(
+            "\nJARVIS is idle. Say 'Hey Jarvis'..."
         )
 
-        exit_phrases = {
-            "shutdown",
-            "shut down",
-            "exit",
-            "quit",
-            "stop",
-            "stop jarvis",
-            "jarvis stop",
-            "stop yourself",
-            "goodbye",
-            "goodbye jarvis",
-            "bye",
-            "bye jarvis",
+        while self.running:
+            audio = self.record_audio(
+                WAKE_AUDIO
+            )
+
+            text = transcribe(
+                WAKE_AUDIO
+            )
+
+            print(
+                f"Heard: {text}"
+            )
+
+            if not self.contains_wake_word(
+                text
+            ):
+                continue
+
+            print("Wake word detected!")
+
+            if not self.authenticate_audio(
+                audio
+            ):
+                continue
+
+            self.active = True
+
+            print("\nJARVIS ACTIVE")
+
+            self.tts.speak(
+                "Yes?"
+            )
+
+            return True
+
+        return False
+
+    def listen_for_authenticated_command(self):
+        print("Listening...")
+
+        audio = self.record_audio(
+            COMMAND_AUDIO
+        )
+
+        text = transcribe(
+            COMMAND_AUDIO
+        )
+
+        return audio, text
+
+    def needs_reauthentication(
+        self,
+        decision,
+    ):
+        high_risk_tools = {
+            "delete_file",
+            "delete_path",
+            "send_message",
+            "send_email",
+            "run_command",
+            "shutdown_computer",
+            "restart_computer",
         }
 
-        return (
-            text in exit_phrases
-            or text.startswith("jarvis stop")
-            or text.startswith("stop jarvis")
-            or text.startswith("shutdown")
-            or text.startswith("shut down")
+        if decision.get(
+            "action"
+        ) != "plan":
+            return False
+
+        return any(
+            step.get("tool")
+            in high_risk_tools
+            for step in decision.get(
+                "steps",
+                [],
+            )
         )
 
-    def run_tool_plan(self, steps):
-        results = []
-
+    def execute_step(
+        self,
+        tool_name,
+        arguments,
+    ):
         browser_tools = {
             "open_url",
             "search_youtube",
             "web_search",
         }
 
-        for index, step in enumerate(
-            steps,
-            start=1,
-        ):
-            tool_name = step["tool"]
-            arguments = step.get(
-                "arguments",
-                {},
-            )
+        if tool_name in browser_tools:
+            self.start_browser()
 
-            if tool_name in browser_tools:
-                self.start_browser()
+        print(
+            f"Executing: {tool_name}"
+        )
 
-            print(
-                f"Step {index}: {tool_name}"
-            )
+        return self.registry.execute(
+            tool_name,
+            **arguments,
+        )
 
-            result = self.registry.execute(
-                tool_name,
-                **arguments,
-            )
+    def execute_plan(
+        self,
+        steps,
+        user_text,
+    ):
+        results = []
+        recovery_count = 0
+        current_steps = steps
 
-            print(
-                f"Result: {result}"
-            )
+        while True:
+            failed = False
 
-            results.append(
-                f"{tool_name}: {result}"
-            )
+            for index, step in enumerate(
+                current_steps,
+                start=1,
+            ):
+                tool_name = step["tool"]
 
-        return "\n".join(results)
+                arguments = step.get(
+                    "arguments",
+                    {},
+                )
+
+                print(
+                    f"Step {index}: "
+                    f"{tool_name}"
+                )
+
+                try:
+                    tool_start = (
+                        time.perf_counter()
+                    )
+
+                    result = self.execute_step(
+                        tool_name,
+                        arguments,
+                    )
+
+                    elapsed = (
+                        time.perf_counter()
+                        - tool_start
+                    )
+
+                    print(
+                        f"Tool execution time: "
+                        f"{elapsed:.2f}s"
+                    )
+
+                    print(
+                        f"Result: {result}"
+                    )
+
+                    results.append(
+                        f"{tool_name}: {result}"
+                    )
+
+                except Exception as exc:
+                    failed = True
+
+                    print(
+                        f"Tool failed: "
+                        f"{tool_name}"
+                    )
+
+                    print(
+                        f"Error: {exc}"
+                    )
+
+                    if (
+                        recovery_count
+                        >= self.max_recovery_attempts
+                    ):
+                        return {
+                            "success": False,
+                            "results": results,
+                            "error": str(exc),
+                        }
+
+                    recovery_count += 1
+
+                    recovery_plan = recover(
+                        user_text,
+                        tool_name,
+                        str(exc),
+                    )
+
+                    print(
+                        f"Recovery plan: "
+                        f"{recovery_plan}"
+                    )
+
+                    if (
+                        recovery_plan.get(
+                            "action"
+                        )
+                        == "respond"
+                    ):
+                        return {
+                            "success": False,
+                            "results": results,
+                            "error": (
+                                recovery_plan.get(
+                                    "response",
+                                    "Recovery failed.",
+                                )
+                            ),
+                        }
+
+                    current_steps = (
+                        recovery_plan.get(
+                            "steps",
+                            [],
+                        )
+                    )
+
+                    break
+
+            if not failed:
+                return {
+                    "success": True,
+                    "results": results,
+                    "error": None,
+                }
+
+    def add_context(
+        self,
+        role,
+        content,
+    ):
+        self.context.append(
+            {
+                "role": role,
+                "content": content,
+            }
+        )
+
+        self.context = self.context[-8:]
 
     def process_command(self, text):
         start = time.perf_counter()
 
-        print("\nAgent thinking...")
+        print(
+            "\nAgent thinking..."
+        )
 
-        decision = decide(text)
+        decision = decide(
+            text,
+            self.context,
+        )
 
         print(
             f"Decision: {decision}"
@@ -269,38 +533,156 @@ class Jarvis:
             f"{time.perf_counter() - start:.2f}s"
         )
 
-        if decision["action"] == "respond":
-            return {
-                "type": "response",
-                "content": decision["response"],
-            }
-
-        if decision["action"] != "plan":
-            return {
-                "type": "response",
-                "content": (
-                    "I could not understand "
-                    "what action to take."
-                ),
-            }
-
-        results = self.run_tool_plan(
-            decision["steps"]
+        self.add_context(
+            "user",
+            text,
         )
+
+        if decision.get(
+            "action"
+        ) == "respond":
+            response = decision.get(
+                "response",
+                "",
+            )
+
+            self.add_context(
+                "assistant",
+                response,
+            )
+
+            return {
+                "type": "response",
+                "content": response,
+            }
+
+        if decision.get(
+            "action"
+        ) != "plan":
+            response = (
+                "I could not understand "
+                "what action to take."
+            )
+
+            self.add_context(
+                "assistant",
+                response,
+            )
+
+            return {
+                "type": "response",
+                "content": response,
+            }
+
+        if self.needs_reauthentication(
+            decision
+        ):
+            print(
+                "High-risk action detected."
+            )
+
+            audio = self.record_audio(
+                COMMAND_AUDIO
+            )
+
+            if not self.authenticate_audio(
+                audio
+            ):
+                response = (
+                    "Speaker verification "
+                    "failed."
+                )
+
+                self.add_context(
+                    "assistant",
+                    response,
+                )
+
+                return {
+                    "type": "response",
+                    "content": response,
+                }
+
+        execution = self.execute_plan(
+            decision["steps"],
+            text,
+        )
+
+        if not execution["success"]:
+            response = execution["error"]
+
+            self.add_context(
+                "assistant",
+                response,
+            )
+
+            return {
+                "type": "response",
+                "content": response,
+            }
+
+        results = execution[
+            "results"
+        ]
+
+        results_text = "\n".join(
+            results
+        )
+
+        self.add_context(
+            "assistant",
+            results_text,
+        )
+
+        synthesis_tools = {
+            "web_search",
+            "search_youtube",
+        }
+
+        needs_llm_synthesis = any(
+            any(
+                item.startswith(
+                    tool + ":"
+                )
+                for item in results
+            )
+            for tool in synthesis_tools
+        )
+
+        if not needs_llm_synthesis:
+            response = (
+                self.direct_confirmation(
+                    results
+                )
+            )
+
+            self.add_context(
+                "assistant",
+                response,
+            )
+
+            return {
+                "type": "direct",
+                "content": response,
+            }
 
         synthesis_prompt = f"""
 You are JARVIS, a desktop AI assistant.
 
+Recent conversation:
+{self.context}
+
 The user asked:
 {text}
 
-The following actions were performed:
-{results}
+The following actions/results are available:
+{results_text}
 
-Give a concise confirmation of what was done.
+Give a concise answer based only on those results.
 
 Rules:
-- Do not invent actions that were not performed.
+- Keep context from the current session in mind.
+- Do not invent facts.
 - Keep it natural for voice.
 - No Markdown.
 - No tables.
@@ -312,66 +694,117 @@ Rules:
             "content": synthesis_prompt,
         }
 
-    def clean_for_speech(self, text):
+    def direct_confirmation(
+        self,
+        results,
+    ):
+        if not results:
+            return "Done."
+
+        if len(results) == 1:
+            result = str(
+                results[0]
+            )
+
+            prefixes = (
+                "Opened and focused ",
+                "Opened ",
+                "Focused window: ",
+                "Typed: ",
+                "Pressed: ",
+                "Clicked at ",
+                "Double-clicked at ",
+                "Moved mouse to ",
+                "Scrolled ",
+                "I'll remember",
+                "is ",
+                "I forgot ",
+            )
+
+            for prefix in prefixes:
+                if result.startswith(
+                    prefix
+                ):
+                    return result
+
+            return result
+
+        return "Done."
+
+    def clean_for_speech(
+        self,
+        text,
+    ):
         text = re.sub(
             r"```.*?```",
             " ",
             text,
             flags=re.DOTALL,
         )
+
         text = re.sub(
             r"`([^`]*)`",
             r"\1",
             text,
         )
+
         text = re.sub(
             r"\*\*(.*?)\*\*",
             r"\1",
             text,
         )
+
         text = re.sub(
             r"\*(.*?)\*",
             r"\1",
             text,
         )
+
         text = re.sub(
             r"__(.*?)__",
             r"\1",
             text,
         )
+
         text = re.sub(
             r"_(.*?)_",
             r"\1",
             text,
         )
+
         text = re.sub(
             r"^#{1,6}\s*",
             "",
             text,
             flags=re.MULTILINE,
         )
+
         text = re.sub(
             r"^\s*[-*+]\s+",
             "",
             text,
             flags=re.MULTILINE,
         )
+
         text = re.sub(
             r"^\s*\d+\.\s+",
             "",
             text,
             flags=re.MULTILINE,
         )
+
         text = re.sub(
             r"\[(.*?)\]\(.*?\)",
             r"\1",
             text,
         )
+
         text = re.sub(
             r"[→←↑↓]",
             " ",
             text,
         )
+
         text = re.sub(
             r"\s+",
             " ",
@@ -382,10 +815,12 @@ Rules:
             "J.A.R.V.I.S.",
             "Jarvis",
         )
+
         text = text.replace(
             "J-A-R-V-I-S",
             "Jarvis",
         )
+
         text = text.replace(
             "JARVIS",
             "Jarvis",
@@ -393,12 +828,21 @@ Rules:
 
         return text.strip()
 
-    def speak_stream(self, prompt):
-        print("\nJARVIS: ", end="", flush=True)
+    def speak_stream(
+        self,
+        prompt,
+    ):
+        print(
+            "\nJARVIS: ",
+            end="",
+            flush=True,
+        )
 
         buffer = ""
 
-        for chunk in stream(prompt):
+        for chunk in stream(
+            prompt
+        ):
             print(
                 chunk,
                 end="",
@@ -413,12 +857,17 @@ Rules:
             )
 
             if len(sentences) > 1:
-                complete = sentences[:-1]
+                complete = sentences[
+                    :-1
+                ]
+
                 buffer = sentences[-1]
 
                 for sentence in complete:
-                    sentence = self.clean_for_speech(
-                        sentence
+                    sentence = (
+                        self.clean_for_speech(
+                            sentence
+                        )
                     )
 
                     if sentence:
@@ -427,8 +876,10 @@ Rules:
                         )
 
         if buffer.strip():
-            sentence = self.clean_for_speech(
-                buffer
+            sentence = (
+                self.clean_for_speech(
+                    buffer
+                )
             )
 
             if sentence:
@@ -438,18 +889,35 @@ Rules:
 
         print()
 
-    def handle_command(self, text):
-        if self.is_exit_command(text):
-            print(
-                "Shutting down JARVIS..."
-            )
-            self.running = False
-            return
+    def shutdown(self):
+        message = (
+            "Bye-bye, sir. "
+            "Shutting down JARVIS."
+        )
 
-        result = self.process_command(text)
+        print(
+            f"\nJARVIS: {message}"
+        )
+
+        self.tts.speak(
+            message
+        )
+
+        self.running = False
+        self.active = False
+
+    def handle_command(
+        self,
+        text,
+    ):
+        result = self.process_command(
+            text
+        )
 
         if result["type"] == "response":
-            response = result["content"]
+            response = result[
+                "content"
+            ]
 
             print(
                 f"\nJARVIS: {response}"
@@ -461,49 +929,59 @@ Rules:
                 )
             )
 
+        elif result["type"] == "direct":
+            response = (
+                self.clean_for_speech(
+                    result["content"]
+                )
+            )
+
+            print(
+                f"\nJARVIS: {response}"
+            )
+
+            self.tts.speak(
+                response
+            )
+
         elif result["type"] == "stream":
             self.speak_stream(
                 result["content"]
             )
 
-    def run_once(self):
+    def run(self):
         try:
-            detected = self.wait_for_wake_word()
-
-            if not detected:
+            if not self.wait_for_activation():
                 return
 
-            print(
-                "\nJARVIS activated."
-            )
-            print(
-                "You can now speak commands directly."
-            )
-
-            while self.running:
-                audio = self.listen_for_command()
-
-                if not self.verify_speaker(
-                    audio
-                ):
-                    print(
-                        "Speaker rejected."
-                    )
-                    continue
-
-                text = transcribe(
-                    COMMAND_AUDIO
+            while (
+                self.running
+                and self.active
+            ):
+                audio, text = (
+                    self.listen_for_authenticated_command()
                 )
 
                 if not text.strip():
-                    print(
-                        "No command detected."
-                    )
                     continue
 
                 print(
                     f"\nYou: {text}"
                 )
+
+                if not self.authenticate_audio(
+                    audio
+                ):
+                    print(
+                        "Command rejected."
+                    )
+                    continue
+
+                if self.is_shutdown_command(
+                    text
+                ):
+                    self.shutdown()
+                    break
 
                 self.handle_command(
                     text
@@ -516,6 +994,7 @@ Rules:
 
         finally:
             self.running = False
+            self.active = False
 
             if self.browser is not None:
                 self.browser.close()
@@ -526,4 +1005,5 @@ Rules:
 
 
 if __name__ == "__main__":
-    Jarvis().run_once()
+    jarvis = Jarvis()
+    jarvis.run()
